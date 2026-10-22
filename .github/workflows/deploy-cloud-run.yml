@@ -1,0 +1,41 @@
+# Deploys the KiteLog service (cloud/) to Cloud Run.  See docs/CLOUD.md for the one-time
+# Google Cloud setup and the GitHub secrets/variables this needs:
+#   secrets:   GCP_PROJECT_ID, and either GCP_SA_KEY (service-account JSON key)
+#              or GCP_WIF_PROVIDER + GCP_SA_EMAIL (Workload Identity Federation, recommended)
+#   variables: GCP_REGION (default us-central1), KITELOG_BUCKET, KITELOG_SERVICE (default kitelog)
+name: Deploy to Cloud Run
+on:
+  push:
+    branches: [main]
+    paths: ["cloud/**", "tools/**", "web/**", "Dockerfile", ".github/workflows/deploy-cloud-run.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      SERVICE: ${{ vars.KITELOG_SERVICE || 'kitelog' }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy (source build via Cloud Build)
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --source . \
+            --region "$REGION" \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --allow-unauthenticated \
+            --memory 1Gi --cpu 1 --min-instances 0 --max-instances 2 \
+            --set-env-vars "KITELOG_BUCKET=${{ vars.KITELOG_BUCKET }}" \
+            --set-secrets "KITELOG_TOKEN=kitelog-token:latest"
+      - run: gcloud run services describe "$SERVICE" --region "$REGION" --project "${{ secrets.GCP_PROJECT_ID }}" --format='value(status.url)'

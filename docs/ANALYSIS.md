@@ -81,7 +81,16 @@ produces a synthetic session with ground truth for testing either pipeline.
 4. Heights consistently off vs. video or a WOO/Surfr reference → adjust `a_eff` for the
    airtime model; a constant offset of ~+0.3 m on the barometer estimate is the arm-posture
    change in flight and can be subtracted.
-5. Barometer trace noisy for a whole session → spray on the sensor port; wear the watch
+5. **Large quick change ("jerk") gates.** The detector already requires a load peak
+   (≥ 1.35 g) before and an impact (≥ 1.6 g) after every flight. The jerk settings add a
+   sharper test on the sample-to-sample change of |f| (g per 40 ms); they are off (0) by
+   default and each jump's panel shows its measured values. Use them if real sessions show
+   false jumps with slow, rounded transients. Simulation caveat: the impulses alone cannot
+   replace the vibration test – loosening *Flight roughness ratio* to 0.6 with jerk gates at
+   0.5 g kept recall but produced >10 false jumps per hour in chop and >100 in rough water,
+   and jerk gates at 0.4 g on their own cost 2–6 % recall. Tune on real data, not on the
+   simulator.
+6. Barometer trace noisy for a whole session → spray on the sensor port; wear the watch
    under the wetsuit sleeve or on the harness/upper arm next time.
 
 Keep the FIT files: every tuning change can be replayed over all sessions with

@@ -53,6 +53,10 @@ class DetectParams:
     min_flight_speed_ratio: float = 0.4
     max_airtime_s: float = 14.0
     takeoff_point: str = "peak"      # "peak" = load-pulse maximum, "mid" = half-way down the pulse
+    # Optional "large quick change" gates on the sample-to-sample jump of |f| (g per 40 ms).
+    # 0 = off.  With roughness contrast weak (glassy water) set rough_ratio ~0.6 and these ~0.4-0.6.
+    takeoff_min_jerk_g: float = 0.0
+    landing_min_jerk_g: float = 0.0
 
 
 @dataclass
@@ -166,6 +170,7 @@ class Features:
     rough: np.ndarray
     rough_ref: np.ndarray
     speed: np.ndarray     # GPS speed interpolated onto the 25 Hz grid (NaN-free, ffilled)
+    jerk: np.ndarray      # |d|f|| between consecutive samples (g per sample), gaps bridged
 
 
 def compute_features(s: Streams, p: DetectParams) -> Features:
@@ -189,7 +194,8 @@ def compute_features(s: Streams, p: DetectParams) -> Features:
         speed = np.interp(s.t, s.gps_t[gps_ok], s.speed[gps_ok])
     else:
         speed = np.full_like(s.t, np.nan)
-    return Features(s.t, mag, mag_filled, m4, m1, rough, rough_ref, speed)
+    jerk = np.abs(np.diff(mag_filled, prepend=mag_filled[0]))
+    return Features(s.t, mag, mag_filled, m4, m1, rough, rough_ref, speed, jerk)
 
 
 @dataclass
@@ -208,6 +214,8 @@ class JumpCandidate:
     accepted: bool = True
     reject_reason: str = ""
     flags: str = ""
+    takeoff_jerk_g: float = float("nan")
+    landing_jerk_g: float = float("nan")
 
 
 def _last_peak(x, a0, a1, thr):
@@ -299,6 +307,8 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
                           float(np.nanmedian(F.rough_ref[a:b])), spd)
         reasons = []
         flags = []
+        c.takeoff_jerk_g = float(F.jerk[a0:a1].max())
+        c.landing_jerk_g = float(F.jerk[b:b1].max()) if b1 > b else float("nan")
         if takeoff_in_gap:
             flags.append("takeoff_in_gap")
         elif pk_to < p.takeoff_min_peak_g:
@@ -309,6 +319,10 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
             reasons.append("no_landing_peak")
         if takeoff_in_gap and landing_in_gap:
             reasons.append("both_transients_in_gap")
+        if p.takeoff_min_jerk_g > 0 and not takeoff_in_gap and F.jerk[a0:a1].max() < p.takeoff_min_jerk_g:
+            reasons.append("no_takeoff_jerk")
+        if p.landing_min_jerk_g > 0 and not landing_in_gap and F.jerk[b:b1].max() < p.landing_min_jerk_g:
+            reasons.append("no_landing_jerk")
         vf = s.valid[a:b].mean()
         if vf < p.min_valid_frac:
             reasons.append("gap_inside")           # a bridged gap looks perfectly smooth - not evidence of flight

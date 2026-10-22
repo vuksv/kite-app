@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+google-cloud-storage>=2.18
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+matplotlib>=3.8
+garmin-fit-sdk>=21.100

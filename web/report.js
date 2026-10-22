@@ -5,7 +5,7 @@ import { analyze, DEFAULT_DETECT, DEFAULT_HEIGHT, interp, jumpModel, localXY } f
 const $ = (id) => document.getElementById(id);
 const UNITS = { kmh: [3.6, 'km/h'], kn: [1.94384, 'kn'], mps: [1, 'm/s'] };
 const KMH = 3.6;
-const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS'];
+const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS', 'takeoffMinJerkG', 'landingMinJerkG'];
 const state = { buffer: null, name: '', fit: null, result: null, sortKey: 'jump', sortDir: 1, map: null };
 
 const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : '–';
@@ -188,7 +188,7 @@ function jumpDetailHtml(j) {
     series: [{ x: fitX, y: fitY, color: 'var(--s3)', width: 1.8 }, { x: bx, y: by, color: 'var(--s3)', dots: true }], vlines: vl, hlines: [0] });
   const c = svgChart({ ...xr, h: 130, yMin: 0, yMax: Math.max(5, Math.max(...sp.filter(Number.isFinite)) * 1.1), title: `GPS speed - take-off ${fmt(j.takeoffSpeed * k)} ${u} · landing ${fmt(j.landingSpeed * k)} ${u}`, yLabel: u, xLabel: 'seconds from take-off',
     series: [{ x: tx, y: sp, color: 'var(--s4)', width: 1.8 }], vlines: vl });
-  const extra = `<p style="font-size:13px">height estimators: fit ${fmt(j.hFit)} m · parabola ${fmt(j.hQuad)} m · max sample ${fmt(j.hMaxSample)} m · airtime model ${fmt(j.hAirtime)} m · ${j.nBaro} baro samples in flight · fit RMSE ${fmt(j.fitRmse, 2)} m, a_up ${fmt(j.fitAUp)} a_dn ${fmt(j.fitADn)} m/s², lag ${fmt(j.fitLag, 2)} s · length by speed ${fmt(j.distSpeed, 0)} m / by position ${fmt(j.distPos, 0)} m${j.heightFlag ? ' · <b>' + esc(j.heightFlag) + '</b>' : ''}</p>`;
+  const extra = `<p style="font-size:13px">transients: take-off jerk ${fmt(j.takeoffJerkG, 2)} g/sample · landing jerk ${fmt(j.landingJerkG, 2)} g/sample · roughness in flight ${fmt(j.roughIn, 3)} g vs reference ${fmt(j.roughRef, 3)} g</p><p style="font-size:13px">height estimators: fit ${fmt(j.hFit)} m · parabola ${fmt(j.hQuad)} m · max sample ${fmt(j.hMaxSample)} m · airtime model ${fmt(j.hAirtime)} m · ${j.nBaro} baro samples in flight · fit RMSE ${fmt(j.fitRmse, 2)} m, a_up ${fmt(j.fitAUp)} a_dn ${fmt(j.fitADn)} m/s², lag ${fmt(j.fitLag, 2)} s · length by speed ${fmt(j.distSpeed, 0)} m / by position ${fmt(j.distPos, 0)} m${j.heightFlag ? ' · <b>' + esc(j.heightFlag) + '</b>' : ''}</p>`;
   return legend([['var(--muted)', '|f| 25 Hz'], ['var(--s1)', '|f| low-pass 4 Hz']]) + a + legend([['var(--s3)', 'barometer height / physics fit']]) + b + c + extra;
 }
 
@@ -271,7 +271,7 @@ function download(name, text, type = 'text/plain') {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 function exportCsv() {
-  const cols = ['jump', 'accepted', 'rejectReason', 'flags', 'tsTo', 'airtime', 'height', 'heightMethod', 'heightFlag', 'hFit', 'hQuad', 'hMaxSample', 'hAirtime', 'fitRmse', 'fitAUp', 'fitADn', 'fitLag', 'nBaro', 'distance', 'distSpeed', 'distPos', 'takeoffSpeed', 'landingSpeed', 'maxAirSpeed', 'takeoffPeakG', 'landingPeakG', 'flightLevelG', 'roughIn', 'roughRef'];
+  const cols = ['jump', 'accepted', 'rejectReason', 'flags', 'tsTo', 'airtime', 'height', 'heightMethod', 'heightFlag', 'hFit', 'hQuad', 'hMaxSample', 'hAirtime', 'fitRmse', 'fitAUp', 'fitADn', 'fitLag', 'nBaro', 'distance', 'distSpeed', 'distPos', 'takeoffSpeed', 'landingSpeed', 'maxAirSpeed', 'takeoffPeakG', 'landingPeakG', 'takeoffJerkG', 'landingJerkG', 'flightLevelG', 'roughIn', 'roughRef'];
   const speedCols = ['takeoffSpeed', 'landingSpeed', 'maxAirSpeed'];      // m/s internally, km/h in the file
   const rows = state.result.jumps.map(j => cols.map(c => { const v = speedCols.includes(c) ? j[c] * KMH : j[c]; return typeof v === 'number' ? (Number.isFinite(v) ? v.toFixed(4) : '') : '"' + String(v).replace(/"/g, '""') + '"'; }).join(','));
   const head = cols.map(c => speedCols.includes(c) ? c + 'Kmh' : c);
@@ -283,6 +283,30 @@ function exportGpx() {
   for (let i = 0; i < s.gpsT.length; i++) if (Number.isFinite(s.lat[i]) && Number.isFinite(s.lon[i]))
     g += `<trkpt lat="${s.lat[i].toFixed(7)}" lon="${s.lon[i].toFixed(7)}"><time>${new Date((s.gpsT[i] + s.tsOffset) * 1000).toISOString()}</time></trkpt>\n`;
   download(state.name.replace(/\.[^.]+$/, '') + '.gpx', g + '</trkseg></trk></gpx>', 'application/gpx+xml');
+}
+
+// ------------------------------------------------------------------ cloud archive
+function cloudSettings() { return { url: ($('cloudUrl').value || '').replace(/\/+$/, ''), token: $('cloudToken').value || '' }; }
+function saveCloudSettings() { try { localStorage.setItem('kitelog.cloud', JSON.stringify(cloudSettings())); } catch (e) { /* private mode */ } }
+function loadCloudSettings() {
+  try { const c = JSON.parse(localStorage.getItem('kitelog.cloud') || 'null'); if (c) { $('cloudUrl').value = c.url || ''; $('cloudToken').value = c.token || ''; } } catch (e) { /* ignore */ }
+  if (!$('cloudUrl').value && location.protocol.startsWith('http') && !/github\.io|localhost|127\.0\.0\.1/.test(location.host)) $('cloudUrl').value = location.origin;
+}
+async function uploadToCloud() {
+  const { url, token } = cloudSettings();
+  const el = $('cloudStatus');
+  if (!state.buffer) { el.textContent = 'Load a file first.'; return; }
+  if (!url) { el.textContent = 'Enter the service URL under Analysis settings › Cloud archive.'; el.className = 'status err'; return; }
+  saveCloudSettings();
+  el.className = 'status'; el.textContent = 'Uploading …';
+  try {
+    const fd = new FormData();
+    fd.append('file', new Blob([state.buffer]), state.name);
+    const r = await fetch(url + '/api/analyze', { method: 'POST', body: fd, headers: token ? { 'X-KiteLog-Token': token } : {} });
+    if (!r.ok) throw new Error(r.status + ' ' + (await r.text()).slice(0, 200));
+    const j = await r.json();
+    el.innerHTML = `Archived as <b>${esc(j.session_id)}</b>: ${j.stats.jumps} jumps, max ${fmt(j.stats.max_height_m)} m · <a href="${url}/api/sessions/${esc(j.session_id)}/jumps.csv${token ? '?token=' + encodeURIComponent(token) : ''}">jumps.csv</a>`;
+  } catch (e) { el.className = 'status err'; el.textContent = 'Upload failed: ' + (e.message || e); }
 }
 
 // ------------------------------------------------------------------ wiring
@@ -299,5 +323,9 @@ $('csvBtn').addEventListener('click', exportCsv);
 $('gpxBtn').addEventListener('click', exportGpx);
 $('printBtn').addEventListener('click', () => window.print());
 $('mapBtn').addEventListener('click', showMap);
+$('cloudBtn').addEventListener('click', uploadToCloud);
+$('cloudUrl').addEventListener('change', saveCloudSettings);
+$('cloudToken').addEventListener('change', saveCloudSettings);
 setDefaults();
+loadCloudSettings();
 if (location.search.includes('sample')) $('sampleBtn').click();

@@ -1,0 +1,12 @@
+.git
+bin
+data
+tools/out
+**/__pycache__
+**/.pytest_cache
+docs
+source
+resources
+*.prg
+*.der
+*.pem

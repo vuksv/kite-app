@@ -162,6 +162,7 @@ export const DEFAULT_DETECT = {
   takeoffSearchS: 1.2, takeoffMinPeakG: 1.35, landingSearchS: 0.9, landingMinPeakG: 1.6, landingRiseG: 0.5,
   minSpeedMps: 3.0, minFlightSpeedMps: 2.5, minFlightSpeedRatio: 0.4, minValidFrac: 0.6, maxDataGapS: 1.5,
   maxAirtimeS: 14.0, takeoffPoint: 'peak',
+  takeoffMinJerkG: 0.0, landingMinJerkG: 0.0,   // optional "large quick change" gates (g per 40 ms sample); 0 = off
 };
 
 export function computeFeatures(s, p = DEFAULT_DETECT) {
@@ -182,7 +183,9 @@ export function computeFeatures(s, p = DEFAULT_DETECT) {
   for (let i = 0; i < s.gpsT.length; i++) if (Number.isFinite(s.speed[i])) { gi.push(s.gpsT[i]); gv.push(s.speed[i]); }
   const speed = new Float64Array(n);
   for (let i = 0; i < n; i++) speed[i] = gi.length >= 2 ? interp(s.t[i], gi, gv) : NaN;
-  return { t: s.t, mag, magF, m4, m1, rough, roughRef, speed };
+  const jerk = new Float64Array(n);
+  for (let i = 1; i < n; i++) jerk[i] = Math.abs(magF[i] - magF[i - 1]);
+  return { t: s.t, mag, magF, m4, m1, rough, roughRef, speed, jerk };
 }
 
 export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
@@ -235,9 +238,12 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
     const spd = Number.isFinite(F.speed[a]) ? F.speed[a] : NaN;
     const spdMin = nanmin(F.speed.subarray(a, b));
     const reasons = [], flags = [];
+    const jerkTo = nanmax(F.jerk.subarray(a0, a1)), jerkLand = b1 > b ? nanmax(F.jerk.subarray(b, b1)) : NaN;
     if (takeoffInGap) flags.push('takeoff_in_gap'); else if (pkTo < p.takeoffMinPeakG) reasons.push('no_takeoff_peak');
     if (landingInGap) flags.push('landing_in_gap'); else if (pkLand < p.landingMinPeakG) reasons.push('no_landing_peak');
     if (takeoffInGap && landingInGap) reasons.push('both_transients_in_gap');
+    if (p.takeoffMinJerkG > 0 && !takeoffInGap && jerkTo < p.takeoffMinJerkG) reasons.push('no_takeoff_jerk');
+    if (p.landingMinJerkG > 0 && !landingInGap && jerkLand < p.landingMinJerkG) reasons.push('no_landing_jerk');
     if (Number.isFinite(spd) && spd < p.minSpeedMps) reasons.push('slow');
     if (Number.isFinite(spdMin) && spdMin < Math.max(p.minFlightSpeedMps, p.minFlightSpeedRatio * spd)) reasons.push('speed_collapse');
     if (airtime <= 0.3 || airtime > p.maxAirtimeS) reasons.push('airtime_range');
@@ -245,7 +251,7 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
     if (vf < p.minValidFrac) reasons.push('gap_inside'); else if (vf < 1) flags.push('gap_in_flight');
     const roughIn = nanmean(Array.from(F.rough.subarray(a, b)).map(v => Number.isFinite(v) ? v : NaN));
     cands.push({ tSmoothStart: F.t[a], tSmoothEnd: F.t[b - 1], tTo, tLand, airtime, takeoffPeakG: pkTo, landingPeakG: pkLand,
-      flightLevelG: flightLevel, roughIn, roughRef: median(F.roughRef.subarray(a, b)), speedTo: spd,
+      flightLevelG: flightLevel, roughIn, roughRef: median(F.roughRef.subarray(a, b)), speedTo: spd, takeoffJerkG: jerkTo, landingJerkG: jerkLand,
       accepted: reasons.length === 0, rejectReason: reasons.join(','), flags: flags.join(',') });
   }
   return { cands, F };
@@ -400,7 +406,7 @@ export function analyze(records, detectParams = DEFAULT_DETECT, heightParams = D
       hAirtime: h.hAirtime, fitRmse: h.fitRmseM, fitAUp: h.fitAUp, fitADn: h.fitADn, fitLag: h.fitLagS, nBaro: h.nFlightSamples, baroSamples: h.samples,
       distance: Number.isFinite(d.distSpeed) ? d.distSpeed : d.distPos, distSpeed: d.distSpeed, distPos: d.distPos,
       takeoffSpeed: d.vTo, landingSpeed: d.vLand, maxAirSpeed: d.vMaxAir,
-      takeoffPeakG: c.takeoffPeakG, landingPeakG: c.landingPeakG, flightLevelG: c.flightLevelG, roughIn: c.roughIn, roughRef: c.roughRef, cand: c, h };
+      takeoffPeakG: c.takeoffPeakG, landingPeakG: c.landingPeakG, takeoffJerkG: c.takeoffJerkG, landingJerkG: c.landingJerkG, flightLevelG: c.flightLevelG, roughIn: c.roughIn, roughRef: c.roughRef, cand: c, h };
   });
   // session stats
   const ti = [], tv = [];

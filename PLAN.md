@@ -291,8 +291,10 @@ print-to-PDF, tunable thresholds and a "show rejected candidates" view for tunin
 Everything runs locally in the browser.  `web/test/compare.mjs` runs the JS pipeline on
 the sample FIT and checks it against the Python result (`web/test/expected_jumps.csv`):
 identical jumps, airtime and height differences 0.000, length within 0.5 m.
-Hosting: enable GitHub Pages (branch `main`, root) → `https://vuksv.github.io/kite-app/web/`.
-See `docs/ANALYSIS.md` for the end-to-end workflow.
+Hosting: `.github/workflows/pages.yml` publishes `web/` to `https://vuksv.github.io/kite-app/`
+(Settings › Pages › Source: GitHub Actions).  Optional session archive + server-side
+pipeline on Cloud Run: `cloud/`, `Dockerfile`, `.github/workflows/deploy-cloud-run.yml`,
+setup in `docs/CLOUD.md`.  See `docs/ANALYSIS.md` for the end-to-end workflow.
 
 ### 6.2 Python pipeline (`tools/`)
 

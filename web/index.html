@@ -33,6 +33,13 @@
         <label class="field">Flight level max (g)<input id="levelMaxG" type="number" step="0.05" value="1.45"></label>
         <label class="field">Min take-off speed (km/h)<input id="minSpeedKmh" type="number" step="1" value="10.8"></label>
         <label class="field">Min smooth time (s)<input id="minSmoothS" type="number" step="0.04" value="0.32"></label>
+        <label class="field">Take-off jerk min (g/sample, 0 = off)<input id="takeoffMinJerkG" type="number" step="0.1" value="0"></label>
+        <label class="field">Landing jerk min (g/sample, 0 = off)<input id="landingMinJerkG" type="number" step="0.1" value="0"></label>
+      </div>
+      <h3>Cloud archive (optional, see docs/CLOUD.md)</h3>
+      <div class="grid">
+        <label class="field">Service URL<input id="cloudUrl" type="url" placeholder="https://kitelog-xxxx.run.app"></label>
+        <label class="field">Token<input id="cloudToken" type="password" placeholder="KITELOG_TOKEN"></label>
       </div>
       <div class="row" style="margin-top:10px">
         <label><input id="showRejected" type="checkbox"> show rejected candidates</label>
@@ -59,7 +66,9 @@
         <button id="csvBtn" type="button">Download jumps CSV</button>
         <button id="gpxBtn" type="button">Download track GPX</button>
         <button id="printBtn" type="button">Print / save PDF</button>
+        <button id="cloudBtn" type="button">Upload to cloud archive</button>
       </div>
+      <div id="cloudStatus" class="status"></div>
     </div>
 
     <div class="card">
