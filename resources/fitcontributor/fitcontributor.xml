@@ -1,0 +1,14 @@
+<!-- Developer field metadata used by Garmin Connect for display only.  The
+     13 packed accelerometer fields are deliberately NOT listed (they are not
+     human readable); the summary fields of phase 2 are. -->
+<fitContributions>
+    <fitField id="13" displayInChart="true" displayInActivityLaps="false" displayInActivitySummary="false"
+              sortOrder="0" precision="0" chartTitle="Raw pressure" dataLabel="Raw pressure" unitLabel="Pa"
+              fillColor="#2a78d6"/>
+    <fitField id="20" displayInChart="false" displayInActivityLaps="true" displayInActivitySummary="false"
+              sortOrder="1" precision="2" dataLabel="Airtime" unitLabel="s"/>
+    <fitField id="21" displayInChart="false" displayInActivityLaps="true" displayInActivitySummary="false"
+              sortOrder="2" precision="1" dataLabel="Jump height" unitLabel="m"/>
+    <fitField id="30" displayInChart="false" displayInActivityLaps="false" displayInActivitySummary="true"
+              sortOrder="3" precision="0" dataLabel="Jumps" unitLabel=""/>
+</fitContributions>

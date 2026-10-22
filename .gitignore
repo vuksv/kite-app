@@ -9,3 +9,9 @@ bin/
 *.code-workspace
 .vscode/
 .DS_Store
+
+# Python / analysis outputs
+__pycache__/
+.pytest_cache/
+tools/out/
+*_analysis/

@@ -1,0 +1,7 @@
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+matplotlib>=3.8
+garmin-fit-sdk>=21.100
+fit-tool>=0.9
+pytest>=7

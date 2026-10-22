@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiteLog Report</title>
+<meta name="description" content="Builds a kite-session report (jumps, height, airtime, distance, track) from a KiteLog FIT file recorded on a Garmin Instinct 2X Solar.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>KiteLog report</h1>
+  <p>Pick the activity file recorded by the KiteLog watch app. A <code>.fit</code>, the <code>.zip</code> from Garmin Connect
+     “Export Original”, or a <code>.fit.gz</code> all work. Everything runs in your browser; nothing is uploaded.</p>
+
+  <section class="card noprint">
+    <div class="row">
+      <input id="file" type="file" accept=".fit,.FIT,.zip,.gz,application/octet-stream">
+      <button id="sampleBtn" type="button">Load sample session</button>
+    </div>
+    <div id="status" class="status"></div>
+    <details id="settings" style="margin-top:10px">
+      <summary>Analysis settings</summary>
+      <div class="grid" style="margin-top:10px">
+        <label class="field">Speed unit
+          <select id="unit"><option value="kn">knots</option><option value="kmh">km/h</option><option value="mps">m/s</option></select></label>
+        <label class="field">Airtime-model a<sub>eff</sub> (m/s²)<input id="aEff" type="number" step="0.1" value="3.2"></label>
+        <label class="field">Flight roughness ratio<input id="roughRatio" type="number" step="0.05" value="0.30"></label>
+        <label class="field">Roughness floor (g)<input id="roughFloorG" type="number" step="0.005" value="0.035"></label>
+        <label class="field">Take-off peak min (g)<input id="takeoffMinPeakG" type="number" step="0.05" value="1.35"></label>
+        <label class="field">Landing peak min (g)<input id="landingMinPeakG" type="number" step="0.1" value="1.6"></label>
+        <label class="field">Flight level min (g)<input id="levelMinG" type="number" step="0.05" value="0.25"></label>
+        <label class="field">Flight level max (g)<input id="levelMaxG" type="number" step="0.05" value="1.45"></label>
+        <label class="field">Min take-off speed (m/s)<input id="minSpeedMps" type="number" step="0.5" value="3"></label>
+        <label class="field">Min smooth time (s)<input id="minSmoothS" type="number" step="0.04" value="0.32"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label><input id="showRejected" type="checkbox"> show rejected candidates</label>
+        <button id="rerun" type="button" disabled>Re-analyse</button>
+        <button id="resetSettings" type="button">Defaults</button>
+      </div>
+    </details>
+  </section>
+
+  <section id="report" class="hidden">
+    <div class="card">
+      <h2 id="title" style="margin-top:0"></h2>
+      <p id="subtitle"></p>
+      <div id="health"></div>
+    </div>
+    <div class="grid" id="tiles"></div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Jumps</h2>
+      <div class="tablewrap"><table id="jumps"><thead></thead><tbody></tbody></table></div>
+      <p class="noprint" style="font-size:13px">Tap a jump to see its signals. Height method: <b>baro_fit</b> = physics fit on the barometer (best),
+        <b>baro_quad</b> = parabola through barometer samples, <b>airtime</b> = a<sub>eff</sub>·T²/8 fallback when the barometer is unusable.</p>
+      <div class="row noprint">
+        <button id="csvBtn" type="button">Download jumps CSV</button>
+        <button id="gpxBtn" type="button">Download track GPX</button>
+        <button id="printBtn" type="button">Print / save PDF</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Track</h2>
+      <div id="track"></div>
+      <div class="row noprint" style="margin-top:8px"><button id="mapBtn" type="button">Show on map (needs internet)</button></div>
+      <div id="map" class="hidden"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Session timeline</h2>
+      <div id="timeline"></div>
+    </div>
+  </section>
+
+  <footer>KiteLog · <a href="https://github.com/vuksv/kite-app">github.com/vuksv/kite-app</a> · analysis runs locally in the browser</footer>
+</main>
+<script type="module" src="report.js"></script>
+</body>
+</html>

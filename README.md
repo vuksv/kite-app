@@ -1,12 +1,58 @@
-# kite-app
+# kite-app · KiteLog
 
-A personal Garmin Connect IQ watch app for kiting.
+A personal Garmin Connect IQ app for kiting on the **Instinct 2X Solar** (`instinct2x`),
+plus the offline analysis that turns a recorded session into jump height, airtime, jump
+length, speed, tacks and a track on a map. Not published to the Connect IQ store.
 
-This is built only for my own **Garmin Instinct 2X Solar** (`instinct2x`). It isn't tested on other devices or published to the Connect IQ Store.
+**Read `PLAN.md` first** – it has the research (what the watch and SDK can and cannot do),
+the physics, the FIT data format, the simulation results and the test plan.
+`docs/ANALYSIS.md` explains how to get the file off the watch and read the report.
 
-## Building
+## Repository layout
 
-You need the [Connect IQ SDK](https://developer.garmin.com/connect-iq/sdk/) and the Monkey C extension for VS Code.
+```
+manifest.xml, monkey.jungle, source/, resources/   Connect IQ watch app (build from the repo root)
+web/                                               report app: open web/index.html, pick the FIT/ZIP, get the report (runs in the browser)
+tools/                                             Python pipeline, session simulator, Monte-Carlo validation, tests
+docs/                                              ANALYSIS.md, validation tables, figures
+PLAN.md                                            the implementation & test plan
+```
 
-- **Run in the simulator:** open the folder in VS Code and run `Monkey C: Run` with `instinct2x` as the target.
-- **Install on the watch:** run `Monkey C: Build for Device`, then copy the `.prg` file to `GARMIN/APPS/` on the watch over USB.
+## Build and install on the watch
+
+You need the [Connect IQ SDK](https://developer.garmin.com/connect-iq/sdk/), the Monkey C
+extension for VS Code and a developer key.
+
+- **Simulator:** open the folder in VS Code, `Monkey C: Run` with `instinct2x`. The
+  simulator does not generate accelerometer data unless you play an activity
+  (Simulation › Activity Data › Play).
+- **Watch:** `Monkey C: Build for Device`, copy the `.prg` to `GARMIN/APPS/` over USB.
+- **Watch settings:** *System › Data Recording › Every Second* (otherwise the FIT writer
+  drops batches) and *Satellites › All + Multi-Band* (the app also requests it).
+
+The sources were written against the API docs for Connect IQ 3.4 but have not been compiled
+yet – expect small fixes on the first build. `PLAN.md` §8 lists the five device spikes to run
+first (accelerometer callback, developer-field limit, barometer, record rate, GPS).
+
+## Recording a session
+
+1. Start **KiteLog** on the watch; it starts acquiring GPS immediately (bars top-left).
+2. **START** begins recording (shows `REC`, timer, speed in knots and a batch counter that
+   should tick every second). START again pauses.
+3. **BACK** opens *Resume / Save / Discard*. Leaving the app with a session open saves it.
+4. Sync. The activity shows up as *Kiteboarding* in Garmin Connect.
+
+## Analysing
+
+Phone: export the activity from connect.garmin.com (*Export Original*), open the report page
+(`web/index.html`, or the GitHub Pages URL once enabled) and pick the zip. Computer: the same,
+or `python tools/analyze.py file.fit --plots`. Details in `docs/ANALYSIS.md`.
+
+## Tests
+
+```
+cd tools && pip install -r requirements.txt
+python -m pytest tests                  # Monkey C <-> Python sample packing equivalence
+python validate.py                      # detection / height accuracy on simulated sessions
+node web/test/compare.mjs web/sample/synthetic.fit web/test/expected_jumps.csv   # JS pipeline == Python pipeline
+```
