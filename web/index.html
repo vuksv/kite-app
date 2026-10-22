@@ -23,7 +23,7 @@
       <summary>Analysis settings</summary>
       <div class="grid" style="margin-top:10px">
         <label class="field">Speed unit
-          <select id="unit"><option value="kn">knots</option><option value="kmh">km/h</option><option value="mps">m/s</option></select></label>
+          <select id="unit"><option value="kmh" selected>km/h</option><option value="kn">knots</option><option value="mps">m/s</option></select></label>
         <label class="field">Airtime-model a<sub>eff</sub> (m/s²)<input id="aEff" type="number" step="0.1" value="3.2"></label>
         <label class="field">Flight roughness ratio<input id="roughRatio" type="number" step="0.05" value="0.30"></label>
         <label class="field">Roughness floor (g)<input id="roughFloorG" type="number" step="0.005" value="0.035"></label>
@@ -31,7 +31,7 @@
         <label class="field">Landing peak min (g)<input id="landingMinPeakG" type="number" step="0.1" value="1.6"></label>
         <label class="field">Flight level min (g)<input id="levelMinG" type="number" step="0.05" value="0.25"></label>
         <label class="field">Flight level max (g)<input id="levelMaxG" type="number" step="0.05" value="1.45"></label>
-        <label class="field">Min take-off speed (m/s)<input id="minSpeedMps" type="number" step="0.5" value="3"></label>
+        <label class="field">Min take-off speed (km/h)<input id="minSpeedKmh" type="number" step="1" value="10.8"></label>
         <label class="field">Min smooth time (s)<input id="minSmoothS" type="number" step="0.04" value="0.32"></label>
       </div>
       <div class="row" style="margin-top:10px">

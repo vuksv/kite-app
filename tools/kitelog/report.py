@@ -12,7 +12,7 @@ import pandas as pd
 from .detect import Streams, Features, JumpCandidate
 from .height import HeightResult, HeightParams
 from .physics import JumpModel, pressure_to_rel_height
-from .session import local_xy
+from .session import local_xy, KMH
 
 C_BLUE, C_ORANGE, C_AQUA, C_YELLOW, C_MAGENTA = "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"
 C_TEXT, C_TEXT2, C_MUTED, C_GRID, C_SURFACE = "#0b0b0b", "#52514e", "#8a8984", "#e8e7e3", "#fcfcfb"
@@ -81,8 +81,8 @@ def plot_jump(s: Streams, F: Features, c: JumpCandidate, h: HeightResult, path: 
     ax.legend(loc="upper right", frameon=False)
     # 4 speed
     ax = axes[3]
-    ax.plot(tt, F.speed[sel] * 1.94384, color=C_YELLOW, lw=1.6, label="GPS speed")
-    ax.set_ylabel("speed (kn)")
+    ax.plot(tt, F.speed[sel] * KMH, color=C_YELLOW, lw=1.6, label="GPS speed")
+    ax.set_ylabel("speed (km/h)")
     ax.set_xlabel("time from take-off (s)")
     ax.set_title("GPS speed (1 Hz, interpolated)")
     for ax in axes:
@@ -116,7 +116,7 @@ def plot_session(s: Streams, F: Features, jumps: pd.DataFrame, path: str):
     ax1.set_title("GPS track")
     tmin = s.t[0]
     gok = np.isfinite(s.speed)
-    ax2.plot((s.gps_t[gok] - tmin) / 60, s.speed[gok] * 1.94384, color=C_YELLOW, lw=0.9, label="speed (kn)")
+    ax2.plot((s.gps_t[gok] - tmin) / 60, s.speed[gok] * KMH, color=C_YELLOW, lw=0.9, label="speed (km/h)")
     acc = jumps[jumps["accepted"]] if len(jumps) else jumps
     if len(acc):
         ax2.vlines((acc["t_to"] - tmin) / 60, 0, 1, transform=ax2.get_xaxis_transform(), color=C_ORANGE, lw=0.8, alpha=0.7)
@@ -125,7 +125,7 @@ def plot_session(s: Streams, F: Features, jumps: pd.DataFrame, path: str):
             ax2.annotate("%.1f m" % j["height_m"], ((j["t_to"] - tmin) / 60, 1.0), xycoords=("data", "axes fraction"),
                          fontsize=8, color=C_TEXT2, ha="center", va="bottom")
     ax2.set_xlabel("session time (min)")
-    ax2.set_ylabel("speed (kn)")
+    ax2.set_ylabel("speed (km/h)")
     ax2.set_title("Speed and jumps")
     ax2.legend(loc="upper right", frameon=False)
     fig.savefig(path, dpi=130, bbox_inches="tight")

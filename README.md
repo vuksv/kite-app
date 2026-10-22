@@ -37,15 +37,16 @@ extension for VS Code and a developer key.
 - **Crash / debug log:** create an empty `GARMIN/APPS/LOGS/KiteLog.TXT` before testing to
   capture `System.println` output; crashes are written to `GARMIN/APPS/LOGS/CIQ_LOG.YML`.
 
-The app compiles with SDK 9.3 and runs in the simulator (UI, session save, 16 developer
-fields declared). The simulator produces no accelerometer data, so the data path is first
-proven on the watch: `PLAN.md` §8 lists the five device spikes to run first (accelerometer
-callback, developer-field limit, barometer, record rate, GPS).
+Status: builds with SDK 9.3; on the watch, spikes S1 (25 Hz accelerometer batches every
+second) and S2 (all 16 developer fields, session saves) pass, and the raw barometer is
+quiet (σ ≈ 2 Pa sitting still). Still to run from `PLAN.md` §8: stairs (S3), a walk with
+*Every Second* recording (S4) and a ride (S5).
 
 ## Recording a session
 
-1. Start **KiteLog** on the watch; it starts acquiring GPS immediately (bars top-left).
-2. **START** begins recording (shows `REC`, timer, speed in knots and a batch counter that
+1. Start **KiteLog** on the watch; it starts acquiring GPS immediately (bars in the round
+   subwindow; speed shows `--` until the fix is usable, and 0 below 2 km/h).
+2. **START** begins recording (shows `REC`, timer, speed in km/h and a batch counter that
    should tick every second). START again pauses.
 3. **BACK** opens *Resume / Save / Discard*. Leaving the app with a session open saves it.
 4. Sync. The activity shows up as *Kiteboarding* in Garmin Connect.

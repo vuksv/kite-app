@@ -33,6 +33,8 @@ class Recorder {
     var seq = 0;
     var batches = 0;
     var jumpCount = 0;
+    var lastSaveOk = null;                // result of the last save, shown briefly by the view
+    var lastSaveTime = 0;
 
     function initialize() {
     }
@@ -75,7 +77,8 @@ class Recorder {
         if (session != null) {
             if (state == STATE_RECORDING) { session.stop(); }
             if (jumpsField != null) { jumpsField.setData(jumpCount); }
-            session.save();
+            lastSaveOk = session.save();
+            lastSaveTime = System.getTimer();
             session = null;
         }
         state = STATE_IDLE;

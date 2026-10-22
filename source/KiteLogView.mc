@@ -79,15 +79,26 @@ class KiteLogView extends WatchUi.View {
         var tFont = (ms >= 3600000) ? Graphics.FONT_NUMBER_MILD : Graphics.FONT_NUMBER_MEDIUM;
         dc.drawText(sub[0] / 2 + 4, cy, tFont, fmtTime(ms), Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
-        // speed in knots
+        // speed in km/h; GPS speed jitters around 1 km/h when standing still (worse
+        // indoors), so show 0 below 2 km/h.  Display only - the FIT keeps raw speed.
         var spd = hub.speedMps;
-        var spdTxt = (spd == null) ? "--" : (spd * 1.94384).format("%.1f");
+        var spdTxt = "--";
+        if (spd != null && hub.gpsQuality >= Position.QUALITY_USABLE) {
+            var kmh = spd * 3.6;
+            if (kmh < 2.0) { kmh = 0.0; }
+            spdTxt = kmh.format("%.1f");
+        }
         dc.drawText(w / 2, 62, Graphics.FONT_NUMBER_THAI_HOT, spdTxt, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(w / 2, 112, Graphics.FONT_XTINY, "kn", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(w / 2, 112, Graphics.FONT_XTINY, "km/h", Graphics.TEXT_JUSTIFY_CENTER);
 
-        // hint while idle, then live jump counter (phase 2) / batch health (phase 1)
+        // while idle: save result for 5 s after a save, else the hint;
+        // then live jump counter (phase 2) / batch health (phase 1)
         if (rec.state == Recorder.STATE_IDLE) {
-            dc.drawText(w / 2, h - 46, Graphics.FONT_XTINY, WatchUi.loadResource(Rez.Strings.PressStart), Graphics.TEXT_JUSTIFY_CENTER);
+            var msg = Rez.Strings.PressStart;
+            if (rec.lastSaveOk != null && System.getTimer() - rec.lastSaveTime < 5000) {
+                msg = rec.lastSaveOk ? Rez.Strings.Saved : Rez.Strings.SaveFailed;
+            }
+            dc.drawText(w / 2, h - 46, Graphics.FONT_XTINY, WatchUi.loadResource(msg), Graphics.TEXT_JUSTIFY_CENTER);
         }
         var bottom;
         if (app.live != null) {

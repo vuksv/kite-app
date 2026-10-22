@@ -5,6 +5,8 @@
     <string id="Resume">Resume</string>
     <string id="PressStart">START to record</string>
     <string id="WaitGps">Waiting for GPS</string>
+    <string id="Saved">Saved</string>
+    <string id="SaveFailed">Save failed</string>
 
     <!-- FIT developer field labels (fitcontributor.xml) -->
     <string id="FieldPressure">Raw pressure</string>

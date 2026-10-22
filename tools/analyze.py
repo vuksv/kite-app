@@ -40,8 +40,8 @@ report.export_map_html(s, jumps, os.path.join(out, "map.html"))
 acc = jumps[jumps["accepted"]] if len(jumps) else jumps
 print(f"jumps: {len(acc)} accepted / {len(jumps)} candidates;  max height {stats.max_height_m:.1f} m, "
       f"max airtime {stats.max_airtime_s:.2f} s, longest {stats.longest_jump_m:.0f} m; tacks {stats.tacks}; "
-      f"distance {stats.distance_m/1000:.1f} km; max speed {stats.max_speed_mps*1.94384:.1f} kn")
-cols = ["jump", "airtime_s", "height_m", "height_method", "distance_m", "takeoff_speed_mps", "takeoff_peak_g", "landing_peak_g", "n_baro_samples"]
+      f"distance {stats.distance_m/1000:.1f} km; max speed {stats.max_speed_kmh:.1f} km/h")
+cols = ["jump", "airtime_s", "height_m", "height_method", "distance_m", "takeoff_speed_kmh", "takeoff_peak_g", "landing_peak_g", "n_baro_samples"]
 if len(acc):
     with pd.option_context("display.width", 160, "display.max_rows", 200):
         print(acc[cols].round(2).to_string(index=False))

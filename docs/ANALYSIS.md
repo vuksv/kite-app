@@ -53,7 +53,7 @@ converge, `airtime` the fallback `a_eff·T²/8` when the barometer was unusable 
 port, missing baseline). Flags such as `landing_in_gap` mean a dropped record touched the
 jump; the numbers are still reported but less certain.
 
-**Analysis settings** (collapsible): speed unit, `a_eff`, and the main detection thresholds.
+**Analysis settings** (collapsible): speed unit (km/h by default), `a_eff`, and the main detection thresholds.
 *Show rejected candidates* lists everything the detector considered and why it was
 rejected – the most useful view while tuning on the first real sessions. Re-analyse applies
 the new values to the loaded file; Defaults restores the values from `kitelog.js`.

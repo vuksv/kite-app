@@ -3,12 +3,13 @@ import { decodeFit, unwrapFit } from './fit.js';
 import { analyze, DEFAULT_DETECT, DEFAULT_HEIGHT, interp, jumpModel, localXY } from './kitelog.js';
 
 const $ = (id) => document.getElementById(id);
-const UNITS = { kn: [1.94384, 'kn'], kmh: [3.6, 'km/h'], mps: [1, 'm/s'] };
-const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSpeedMps', 'minSmoothS'];
+const UNITS = { kmh: [3.6, 'km/h'], kn: [1.94384, 'kn'], mps: [1, 'm/s'] };
+const KMH = 3.6;
+const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS'];
 const state = { buffer: null, name: '', fit: null, result: null, sortKey: 'jump', sortDir: 1, map: null };
 
 const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : '–';
-const speedUnit = () => UNITS[$('unit').value] || UNITS.kn;
+const speedUnit = () => UNITS[$('unit').value] || UNITS.kmh;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hms = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return (h ? h + ':' : '') + String(m).padStart(h ? 2 : 1, '0') + ':' + String(x).padStart(2, '0'); };
 const clock = (unix) => new Date(unix * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -18,11 +19,14 @@ function setStatus(msg, err = false) { const el = $('status'); el.textContent = 
 function readParams() {
   const d = { ...DEFAULT_DETECT };
   for (const id of PARAM_IDS) { const v = parseFloat($(id).value); if (Number.isFinite(v)) d[id] = v; }
+  const vMin = parseFloat($('minSpeedKmh').value);        // entered in km/h, detector works in m/s
+  if (Number.isFinite(vMin)) d.minSpeedMps = vMin / KMH;
   const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || 3.2 };
   return { d, h };
 }
 function setDefaults() {
   for (const id of PARAM_IDS) $(id).value = DEFAULT_DETECT[id];
+  $('minSpeedKmh').value = +(DEFAULT_DETECT.minSpeedMps * KMH).toFixed(1);
   $('aEff').value = DEFAULT_HEIGHT.aEff;
 }
 
@@ -268,8 +272,10 @@ function download(name, text, type = 'text/plain') {
 }
 function exportCsv() {
   const cols = ['jump', 'accepted', 'rejectReason', 'flags', 'tsTo', 'airtime', 'height', 'heightMethod', 'heightFlag', 'hFit', 'hQuad', 'hMaxSample', 'hAirtime', 'fitRmse', 'fitAUp', 'fitADn', 'fitLag', 'nBaro', 'distance', 'distSpeed', 'distPos', 'takeoffSpeed', 'landingSpeed', 'maxAirSpeed', 'takeoffPeakG', 'landingPeakG', 'flightLevelG', 'roughIn', 'roughRef'];
-  const rows = state.result.jumps.map(j => cols.map(c => { const v = j[c]; return typeof v === 'number' ? (Number.isFinite(v) ? v.toFixed(4) : '') : '"' + String(v).replace(/"/g, '""') + '"'; }).join(','));
-  download(state.name.replace(/\.[^.]+$/, '') + '_jumps.csv', cols.join(',') + '\n' + rows.join('\n'), 'text/csv');
+  const speedCols = ['takeoffSpeed', 'landingSpeed', 'maxAirSpeed'];      // m/s internally, km/h in the file
+  const rows = state.result.jumps.map(j => cols.map(c => { const v = speedCols.includes(c) ? j[c] * KMH : j[c]; return typeof v === 'number' ? (Number.isFinite(v) ? v.toFixed(4) : '') : '"' + String(v).replace(/"/g, '""') + '"'; }).join(','));
+  const head = cols.map(c => speedCols.includes(c) ? c + 'Kmh' : c);
+  download(state.name.replace(/\.[^.]+$/, '') + '_jumps.csv', head.join(',') + '\n' + rows.join('\n'), 'text/csv');
 }
 function exportGpx() {
   const { streams: s } = state.result;

@@ -10,6 +10,8 @@ import pandas as pd
 from .detect import Streams, JumpCandidate
 from .height import HeightResult
 
+KMH = 3.6        # m/s -> km/h; speeds are m/s internally, km/h in every output
+
 
 def local_xy(lat, lon, lat0=None, lon0=None):
     lat = np.asarray(lat, float)
@@ -76,7 +78,7 @@ def jumps_table(s: Streams, cands: list[JumpCandidate], heights: list[HeightResu
             n_baro_samples=h.n_flight_samples,
             distance_m=d["dist_speed"] if np.isfinite(d["dist_speed"]) else d["dist_pos"],
             dist_speed_m=d["dist_speed"], dist_pos_m=d["dist_pos"],
-            takeoff_speed_mps=d["v_to"], landing_speed_mps=d["v_land"],
+            takeoff_speed_kmh=d["v_to"] * KMH, landing_speed_kmh=d["v_land"] * KMH,
             takeoff_peak_g=c.takeoff_peak_g, landing_peak_g=c.landing_peak_g, flight_level_g=c.flight_level_g,
             rough_in_g=c.rough_in, rough_ref_g=c.rough_ref,
         ))
@@ -88,9 +90,9 @@ class SessionStats:
     duration_s: float
     riding_time_s: float
     distance_m: float
-    max_speed_mps: float
-    max_speed_10s_mps: float
-    avg_riding_speed_mps: float
+    max_speed_kmh: float
+    max_speed_10s_kmh: float
+    avg_riding_speed_kmh: float
     tacks: int
     jumps: int
     max_height_m: float
@@ -149,9 +151,9 @@ def session_stats(s: Streams, jumps: pd.DataFrame) -> SessionStats:
         duration_s=float(s.t[-1] - s.t[0]),
         riding_time_s=float(np.sum(dt[riding])),
         distance_m=float(np.sum(spd * dt)),
-        max_speed_mps=float(np.max(spd)) if len(spd) else np.nan,
-        max_speed_10s_mps=float(np.max(spd10)) if len(spd10) else np.nan,
-        avg_riding_speed_mps=float(np.mean(spd[riding])) if riding.any() else np.nan,
+        max_speed_kmh=float(np.max(spd)) * KMH if len(spd) else np.nan,
+        max_speed_10s_kmh=float(np.max(spd10)) * KMH if len(spd10) else np.nan,
+        avg_riding_speed_kmh=float(np.mean(spd[riding])) * KMH if riding.any() else np.nan,
         tacks=count_tacks(s),
         jumps=int(len(acc)),
         max_height_m=float(acc["height_m"].max()) if len(acc) else 0.0,

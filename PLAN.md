@@ -39,7 +39,7 @@ plus the GPS trace on a map, Hoolan/Surfr style.  Processing happens off the wat
   simulator is honest about what it does not know (real wrist vibration levels, real
   barometer behaviour in spray and wind) – those are the first things the field tests
   measure.
-* **Live display:** timer, speed in knots, GPS quality and a recording health counter are
+* **Live display:** timer, speed in km/h, GPS quality and a recording health counter are
   in the skeleton.  A simple live jump counter is included as phase 2 (off by default).
 
 ---
@@ -242,7 +242,7 @@ source/KiteLogApp.mc         AppBase: wires Recorder + SensorHub (+ LiveJumpDete
 source/SensorHub.mc          GPS config fallback chain, 25 Hz listener, raw pressure read per batch
 source/Recorder.mc           session (SPORT_KITESURFING), 16 record fields, onBatch() packing, pause/save/discard
 source/Pack.mc               encodeMg / packPair / packMeta  (mirrors tools/kitelog/packing.py and web/kitelog.js)
-source/KiteLogView.mc        timer (big), speed in knots (big), REC/PAUSED/READY, GPS bars, batch health
+source/KiteLogView.mc        timer (big), speed in km/h (big), REC/PAUSED/READY, GPS bars, batch health
 source/KiteLogDelegate.mc    START = start/pause, BACK = Save/Discard/Resume menu (Menu2), BACK idle = exit
 source/LiveJumpDetector.mc   phase 2, off by default (LIVE_DETECTOR const in KiteLogApp.mc)
 ```
@@ -259,7 +259,7 @@ Key behaviours:
   is open and exits when idle; `onStop` saves an open session so leaving the app never loses
   data.
 * **Display:** 2-colour, large fonts, nothing drawn in the Instinct's top-right subwindow
-  area.  Shows timer, speed (kn), GPS quality bars, and `b<batches> n<samples>` so you can
+  area.  Shows timer, speed (km/h), GPS quality bars, and `b<batches> n<samples>` so you can
   see at a glance that the sensor stream is alive (phase 1); jump count + last airtime in
   phase 2.
 * **Memory:** no bitmaps except the 40×40 icon, no layouts, no large arrays – well inside
