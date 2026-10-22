@@ -26,13 +26,21 @@ extension for VS Code and a developer key.
 - **Simulator:** open the folder in VS Code, `Monkey C: Run` with `instinct2x`. The
   simulator does not generate accelerometer data unless you play an activity
   (Simulation › Activity Data › Play).
-- **Watch:** `Monkey C: Build for Device`, copy the `.prg` to `GARMIN/APPS/` over USB.
+- **Watch:** `Monkey C: Build for Device` (or the command below), set the watch to
+  *System › USB Mode › Mass Storage*, plug it in and copy `KiteLog.prg` to `GARMIN/APPS/`.
+  Eject, unplug; KiteLog appears in the activity list (START from the watch face).
+  ```
+  monkeyc -d instinct2x -f monkey.jungle -o bin/KiteLog.prg -y <developer_key> -r
+  ```
 - **Watch settings:** *System › Data Recording › Every Second* (otherwise the FIT writer
   drops batches) and *Satellites › All + Multi-Band* (the app also requests it).
+- **Crash / debug log:** create an empty `GARMIN/APPS/LOGS/KiteLog.TXT` before testing to
+  capture `System.println` output; crashes are written to `GARMIN/APPS/LOGS/CIQ_LOG.YML`.
 
-The sources were written against the API docs for Connect IQ 3.4 but have not been compiled
-yet – expect small fixes on the first build. `PLAN.md` §8 lists the five device spikes to run
-first (accelerometer callback, developer-field limit, barometer, record rate, GPS).
+The app compiles with SDK 9.3 and runs in the simulator (UI, session save, 16 developer
+fields declared). The simulator produces no accelerometer data, so the data path is first
+proven on the watch: `PLAN.md` §8 lists the five device spikes to run first (accelerometer
+callback, developer-field limit, barometer, record rate, GPS).
 
 ## Recording a session
 

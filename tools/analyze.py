@@ -23,6 +23,9 @@ if a.input.lower().endswith(".fit"):
     print("FIT:", {k: v for k, v in info.items() if k != "field_descriptions"})
 else:
     rec = pd.read_csv(a.input)
+if "acc_0" not in rec or rec["acc_0"].notna().sum() == 0:
+    raise SystemExit(f"no accelerometer batches in {len(rec)} records - the sensor listener never fired "
+                     "(PLAN.md S1: check the b/n counter on the watch; in the simulator, play activity data)")
 s = build_streams(rec)
 print(f"streams: {len(s.t)} samples, valid {s.valid.mean():.4f}, batches {s.n_batches}, dup {s.n_dup}, gaps {s.n_gap}")
 cands, F = detect_jumps(s, DetectParams())
@@ -34,13 +37,14 @@ jumps.to_csv(os.path.join(out, "jumps.csv"), index=False)
 json.dump(asdict(stats), open(os.path.join(out, "session.json"), "w"), indent=1)
 report.export_gpx(s, os.path.join(out, "track.gpx"))
 report.export_map_html(s, jumps, os.path.join(out, "map.html"))
-acc = jumps[jumps.accepted]
+acc = jumps[jumps["accepted"]] if len(jumps) else jumps
 print(f"jumps: {len(acc)} accepted / {len(jumps)} candidates;  max height {stats.max_height_m:.1f} m, "
       f"max airtime {stats.max_airtime_s:.2f} s, longest {stats.longest_jump_m:.0f} m; tacks {stats.tacks}; "
       f"distance {stats.distance_m/1000:.1f} km; max speed {stats.max_speed_mps*1.94384:.1f} kn")
 cols = ["jump", "airtime_s", "height_m", "height_method", "distance_m", "takeoff_speed_mps", "takeoff_peak_g", "landing_peak_g", "n_baro_samples"]
-with pd.option_context("display.width", 160, "display.max_rows", 200):
-    print(acc[cols].round(2).to_string(index=False))
+if len(acc):
+    with pd.option_context("display.width", 160, "display.max_rows", 200):
+        print(acc[cols].round(2).to_string(index=False))
 if a.truth:
     truth = json.load(open(a.truth))
     off = truth["tmr_offset_s"]

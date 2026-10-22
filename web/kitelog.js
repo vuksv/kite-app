@@ -115,7 +115,8 @@ function lastPeak(x, a0, a1, thr) {                // last local maximum >= thr 
 
 // ------------------------------------------------------------------ streams
 export function buildStreams(records) {
-  const recs = records.filter(r => r.dev && r.dev.tmr != null && r.dev.meta != null).map(r => ({ ...r, tmr: r.dev.tmr, meta: unpackMeta(r.dev.meta) }));
+  // records written before the first accelerometer batch carry no samples and a placeholder tmr
+  const recs = records.filter(r => r.dev && r.dev.tmr != null && r.dev.meta != null && r.dev.acc_0 != null).map(r => ({ ...r, tmr: r.dev.tmr, meta: unpackMeta(r.dev.meta) }));
   recs.sort((a, b) => a.tmr - b.tmr);
   const uniq = [];
   let nDup = 0;

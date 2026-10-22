@@ -16,9 +16,9 @@ using Toybox.Lang;
 
 class Recorder {
     const N_ACC_FIELDS = 13;
-    const STATE_IDLE = 0;
-    const STATE_RECORDING = 1;
-    const STATE_PAUSED = 2;
+    static const STATE_IDLE = 0;
+    static const STATE_RECORDING = 1;
+    static const STATE_PAUSED = 2;
     const ENABLE_LAP_FIELDS = false;      // phase 2 - flip after spike test S2
 
     var session = null;

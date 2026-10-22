@@ -72,12 +72,12 @@ class SensorHub {
         }
     }
 
-    function onPosition(info) {
+    function onPosition(info as Position.Info) as Void {
         speedMps = info.speed;
         gpsQuality = info.accuracy;
     }
 
-    function onSensorData(sensorData) {
+    function onSensorData(sensorData as Sensor.SensorData) as Void {
         var ad = sensorData.accelerometerData;
         if (ad == null) { return; }
         var xs = ad.x;

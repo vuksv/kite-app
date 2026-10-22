@@ -74,7 +74,9 @@ class Streams:
 
 
 def build_streams(records: pd.DataFrame) -> Streams:
-    rec = records.copy()
+    # records written before the first accelerometer batch carry no samples and a
+    # placeholder tmr (0 or invalid) that would sort them out of time order
+    rec = records[records["acc_0"].notna()].copy()
     meta = rec["meta"].astype(np.int64).map(P.unpack_meta)
     rec["seq"] = [m["seq"] for m in meta]
     rec["n_valid"] = [m["n_valid"] for m in meta]

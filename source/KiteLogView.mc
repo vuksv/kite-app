@@ -1,5 +1,6 @@
-// KiteLogView.mc - 176x176 2-colour MIP display.  Keeps the top-right subwindow
-// circle of the Instinct 2X free (nothing drawn above y = 40 on the right side).
+// KiteLogView.mc - 176x176 2-colour MIP display.  The Instinct 2X has a 62x62
+// round subwindow in the top-right corner; it shows the recording state and GPS
+// bars, the timer sits to its left, speed is the big number in the middle.
 using Toybox.WatchUi;
 using Toybox.Graphics;
 using Toybox.System;
@@ -11,10 +12,20 @@ using Toybox.Lang;
 class KiteLogView extends WatchUi.View {
     var app;
     var timer;
+    var sub;                        // subwindow bounding box {x, y, w, h}
 
     function initialize(a) {
         View.initialize();
         app = a;
+    }
+
+    function onLayout(dc) {
+        // fallback = the instinct2x subwindow position
+        sub = [113, 1, 62, 62];
+        if (WatchUi has :getSubscreen) {
+            var r = WatchUi.getSubscreen();
+            if (r != null) { sub = [r.x, r.y, r.width, r.height]; }
+        }
     }
 
     function onShow() {
@@ -26,7 +37,7 @@ class KiteLogView extends WatchUi.View {
         if (timer != null) { timer.stop(); timer = null; }
     }
 
-    function onTick() {
+    function onTick() as Void {
         WatchUi.requestUpdate();
     }
 
@@ -48,34 +59,42 @@ class KiteLogView extends WatchUi.View {
         dc.clear();
         var rec = app.recorder;
         var hub = app.hub;
-        // status line (left of the subwindow)
-        var status = rec.isRecording() ? "REC" : (rec.state == Recorder.STATE_PAUSED ? "PAUSED" : "READY");
-        dc.drawText(6, 4, Graphics.FONT_XTINY, status, Graphics.TEXT_JUSTIFY_LEFT);
-        // GPS quality bars
+
+        // subwindow: state word + GPS quality bars
+        var cx = sub[0] + sub[2] / 2;
+        var cy = sub[1] + sub[3] / 2;
+        var status = rec.isRecording() ? "REC" : (rec.state == Recorder.STATE_PAUSED ? "PAUSE" : "READY");
+        dc.drawText(cx, cy - 20, Graphics.FONT_XTINY, status, Graphics.TEXT_JUSTIFY_CENTER);
         var q = hub.gpsQuality;
         for (var i = 0; i < 4; i++) {
-            var y = 24 - i * 3;
-            if (q > i) { dc.fillRectangle(70 + i * 6, y, 4, 4 + i * 3); } else { dc.drawRectangle(70 + i * 6, y, 4, 4 + i * 3); }
+            var bh = 4 + i * 3;
+            var bx = cx - 13 + i * 7;
+            var by = cy + 14 - bh;
+            if (q > i) { dc.fillRectangle(bx, by, 5, bh); } else { dc.drawRectangle(bx, by, 5, bh); }
         }
-        // timer (big)
+
+        // timer, left of the subwindow (smaller font once it needs hours)
         var info = Activity.getActivityInfo();
         var ms = (info != null && info.timerTime != null) ? info.timerTime : 0;
-        dc.drawText(w / 2, 36, Graphics.FONT_NUMBER_MEDIUM, fmtTime(ms), Graphics.TEXT_JUSTIFY_CENTER);
+        var tFont = (ms >= 3600000) ? Graphics.FONT_NUMBER_MILD : Graphics.FONT_NUMBER_MEDIUM;
+        dc.drawText(sub[0] / 2 + 4, cy, tFont, fmtTime(ms), Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
         // speed in knots
         var spd = hub.speedMps;
-        var spdTxt = (spd == null) ? "--.-" : (spd * 1.94384).format("%.1f");
-        dc.drawText(w / 2, 86, Graphics.FONT_NUMBER_HOT, spdTxt, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(w / 2, 134, Graphics.FONT_XTINY, "kn", Graphics.TEXT_JUSTIFY_CENTER);
-        // live jump counter (phase 2) / batch health (phase 1)
+        var spdTxt = (spd == null) ? "--" : (spd * 1.94384).format("%.1f");
+        dc.drawText(w / 2, 62, Graphics.FONT_NUMBER_THAI_HOT, spdTxt, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(w / 2, 112, Graphics.FONT_XTINY, "kn", Graphics.TEXT_JUSTIFY_CENTER);
+
+        // hint while idle, then live jump counter (phase 2) / batch health (phase 1)
+        if (rec.state == Recorder.STATE_IDLE) {
+            dc.drawText(w / 2, h - 46, Graphics.FONT_XTINY, WatchUi.loadResource(Rez.Strings.PressStart), Graphics.TEXT_JUSTIFY_CENTER);
+        }
         var bottom;
         if (app.live != null) {
             bottom = "J " + app.live.jumps + "  " + app.live.lastAirtime.format("%.1f") + "s";
         } else {
             bottom = "b" + rec.batches + " n" + hub.lastBatchSize;
         }
-        dc.drawText(w / 2, h - 26, Graphics.FONT_TINY, bottom, Graphics.TEXT_JUSTIFY_CENTER);
-        if (!rec.isRecording() && rec.state == Recorder.STATE_IDLE) {
-            dc.drawText(w / 2, h - 44, Graphics.FONT_XTINY, WatchUi.loadResource(Rez.Strings.PressStart), Graphics.TEXT_JUSTIFY_CENTER);
-        }
+        dc.drawText(w / 2, h - 28, Graphics.FONT_TINY, bottom, Graphics.TEXT_JUSTIFY_CENTER);
     }
 }

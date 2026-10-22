@@ -3,12 +3,12 @@
      human readable); the summary fields of phase 2 are. -->
 <fitContributions>
     <fitField id="13" displayInChart="true" displayInActivityLaps="false" displayInActivitySummary="false"
-              sortOrder="0" precision="0" chartTitle="Raw pressure" dataLabel="Raw pressure" unitLabel="Pa"
+              sortOrder="0" precision="0" chartTitle="@Strings.FieldPressure" dataLabel="@Strings.FieldPressure" unitLabel="@Strings.UnitPa"
               fillColor="#2a78d6"/>
     <fitField id="20" displayInChart="false" displayInActivityLaps="true" displayInActivitySummary="false"
-              sortOrder="1" precision="2" dataLabel="Airtime" unitLabel="s"/>
+              sortOrder="1" precision="2" dataLabel="@Strings.FieldAirtime" unitLabel="@Strings.UnitSeconds"/>
     <fitField id="21" displayInChart="false" displayInActivityLaps="true" displayInActivitySummary="false"
-              sortOrder="2" precision="1" dataLabel="Jump height" unitLabel="m"/>
+              sortOrder="2" precision="1" dataLabel="@Strings.FieldJumpHeight" unitLabel="@Strings.UnitMeters"/>
     <fitField id="30" displayInChart="false" displayInActivityLaps="false" displayInActivitySummary="true"
-              sortOrder="3" precision="0" dataLabel="Jumps" unitLabel=""/>
+              sortOrder="3" precision="0" dataLabel="@Strings.FieldJumps" unitLabel="@Strings.UnitJumps"/>
 </fitContributions>

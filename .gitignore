@@ -12,6 +12,7 @@ bin/
 
 # Python / analysis outputs
 __pycache__/
+.venv/
 .pytest_cache/
 tools/out/
 *_analysis/

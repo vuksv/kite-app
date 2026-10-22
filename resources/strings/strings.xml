@@ -5,4 +5,14 @@
     <string id="Resume">Resume</string>
     <string id="PressStart">START to record</string>
     <string id="WaitGps">Waiting for GPS</string>
+
+    <!-- FIT developer field labels (fitcontributor.xml) -->
+    <string id="FieldPressure">Raw pressure</string>
+    <string id="FieldAirtime">Airtime</string>
+    <string id="FieldJumpHeight">Jump height</string>
+    <string id="FieldJumps">Jumps</string>
+    <string id="UnitPa">Pa</string>
+    <string id="UnitSeconds">s</string>
+    <string id="UnitMeters">m</string>
+    <string id="UnitJumps">jumps</string>
 </strings>
