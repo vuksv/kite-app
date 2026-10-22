@@ -57,6 +57,7 @@ class DetectParams:
     # 0 = off.  With roughness contrast weak (glassy water) set rough_ratio ~0.6 and these ~0.4-0.6.
     takeoff_min_jerk_g: float = 0.0
     landing_min_jerk_g: float = 0.0
+    min_rough_ref_g: float = 0.05    # no chop vibration around the candidate = not riding (rest, walking): no "vibration drop" evidence
 
 
 @dataclass
@@ -71,7 +72,9 @@ class Streams:
     lat: np.ndarray
     lon: np.ndarray
     speed: np.ndarray
-    ts_offset: float         # ts (unix s) ~= t + ts_offset
+    ts_offset: float         # ts (unix s) ~= ts_slope * t + ts_offset
+    ts_slope: float = 1.0
+    sample_dt: float = 1.0 / FS
     n_dup: int = 0
     n_gap: int = 0
     n_batches: int = 0
@@ -91,7 +94,17 @@ def build_streams(records: pd.DataFrame) -> Streams:
     rec_u = rec[~dup].reset_index(drop=True)
     t_batch = rec_u["tmr"].to_numpy(dtype=float) / 1000.0
     ts = rec_u["ts"].to_numpy(dtype=float)
-    ts_offset = float(np.median(ts - t_batch))
+    # Batches arrive every ~0.99 s on the Instinct 2X (25 samples at ~25.3 Hz), and the
+    # record clock (RTC) and System.getTimer() drift apart by ~0.2 %: use the measured
+    # batch spacing for the sample grid and a linear fit for the ts <-> tmr mapping.
+    db = np.diff(t_batch)
+    db = db[(db > 0.5) & (db < 1.5)]
+    dt = (float(np.median(db)) if len(db) >= 5 else 1.0) / FS
+    if len(t_batch) >= 20:
+        slope, icpt = np.polyfit(t_batch, ts, 1)
+    else:
+        slope, icpt = 1.0, float(np.median(ts - t_batch))
+    ts_offset = float(icpt)
     # assemble samples
     sample_t, sample_f = [], []
     n_gap = 0
@@ -101,7 +114,7 @@ def build_streams(records: pd.DataFrame) -> Streams:
         if n == 0:
             continue
         g = P.decode_code_array(codes)
-        tt = t_batch[i] - (n - 1 - np.arange(n)) / FS
+        tt = t_batch[i] - (n - 1 - np.arange(n)) * dt
         sample_t.append(tt)
         sample_f.append(g)
         if i > 0 and t_batch[i] - t_batch[i - 1] > 1.5:
@@ -110,17 +123,17 @@ def build_streams(records: pd.DataFrame) -> Streams:
     sf = np.concatenate(sample_f)
     # uniform grid
     t0, t1 = st[0], st[-1]
-    grid = np.arange(0, int(round((t1 - t0) * FS)) + 1) / FS + t0
-    idx = np.rint((st - t0) * FS).astype(int)
+    grid = np.arange(0, int(round((t1 - t0) / dt)) + 1) * dt + t0
+    idx = np.rint((st - t0) / dt).astype(int)
     f = np.full((len(grid), 3), np.nan)
     ok = (idx >= 0) & (idx < len(grid))
     f[idx[ok]] = sf[ok]
     valid = ~np.isnan(f[:, 0])
     press = rec_u["press"].to_numpy(dtype=float)
-    gps_t = ts - ts_offset - 0.5     # fix typically precedes the record write
+    gps_t = (ts - icpt) / slope - 0.5     # fix typically precedes the record write
     return Streams(t=grid, f=f, valid=valid, press_t=t_batch, press=press, gps_t=gps_t,
                    lat=rec_u["lat"].to_numpy(dtype=float), lon=rec_u["lon"].to_numpy(dtype=float),
-                   speed=rec_u["speed"].to_numpy(dtype=float), ts_offset=ts_offset,
+                   speed=rec_u["speed"].to_numpy(dtype=float), ts_offset=ts_offset, ts_slope=float(slope), sample_dt=dt,
                    n_dup=n_dup, n_gap=n_gap, n_batches=len(rec_u))
 
 
@@ -319,6 +332,8 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
             reasons.append("no_landing_peak")
         if takeoff_in_gap and landing_in_gap:
             reasons.append("both_transients_in_gap")
+        if p.min_rough_ref_g > 0 and float(np.nanmedian(F.rough_ref[a:b])) < p.min_rough_ref_g:
+            reasons.append("no_vibration_context")
         if p.takeoff_min_jerk_g > 0 and not takeoff_in_gap and F.jerk[a0:a1].max() < p.takeoff_min_jerk_g:
             reasons.append("no_takeoff_jerk")
         if p.landing_min_jerk_g > 0 and not landing_in_gap and F.jerk[b:b1].max() < p.landing_min_jerk_g:

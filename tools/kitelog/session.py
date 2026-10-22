@@ -48,13 +48,17 @@ def jump_distance(s: Streams, t_to: float, t_land: float) -> dict:
     return out
 
 
-def baro_consistent(c: JumpCandidate, h: HeightResult, a_floor: float = 1.0) -> bool:
+def baro_consistent(c: JumpCandidate, h: HeightResult, a_floor: float = 1.0, quiet_std_m: float = 0.6) -> bool:
     """A real jump of airtime T rises at least ~a_floor*T^2/8 (a_floor = 1 m/s^2 is an
     extremely floaty kite).  With a trustworthy baro baseline, a long 'flight' that
     shows no height is a transition or a quiet glide, not a jump."""
-    if not h.baseline_ok or not np.isfinite(h.h_fit) or c.airtime < 2.0:
-        return True
-    return h.h_fit >= 0.5 * a_floor * c.airtime ** 2 / 8.0
+    if not h.baseline_ok or h.n_flight_samples == 0 or c.airtime < 2.5:
+        return True                      # no usable barometer evidence either way
+    h_min = 0.5 * a_floor * c.airtime ** 2 / 8.0
+    quiet = np.isfinite(h.h_flight_std_m) and h.h_flight_std_m < quiet_std_m
+    if quiet and np.isfinite(h.h_max_sample) and h.h_max_sample < h_min:
+        return False                     # a clean barometer trace that shows no rise: not a jump
+    return True                          # a wild trace (splash) proves nothing either way: keep, flagged by the height method
 
 
 def jumps_table(s: Streams, cands: list[JumpCandidate], heights: list[HeightResult]) -> pd.DataFrame:
@@ -70,7 +74,7 @@ def jumps_table(s: Streams, cands: list[JumpCandidate], heights: list[HeightResu
             reject_reason=reason,
             flags=c.flags,
             t_to=c.t_to, t_land=c.t_land,
-            ts_to=c.t_to + s.ts_offset,
+            ts_to=c.t_to * s.ts_slope + s.ts_offset,
             airtime_s=c.airtime,
             height_m=h.best, height_method=h.method, height_flag=h.flag,
             h_fit=h.h_fit, h_quad=h.h_quad, h_max_sample=h.h_max_sample, h_airtime=h.h_airtime,

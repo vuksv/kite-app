@@ -45,6 +45,7 @@ class HeightResult:
     best: float = np.nan
     method: str = ""
     n_flight_samples: int = 0
+    h_flight_std_m: float = np.nan     # spread of the in-flight baro samples: ~0.1-0.3 m quiet, >> 0.6 m corrupted/splash
     fit_rmse_m: float = np.nan
     fit_a_up: float = np.nan
     fit_a_dn: float = np.nan
@@ -100,6 +101,7 @@ def estimate_height(t_to: float, t_land: float, press_t: np.ndarray, press: np.n
         return r
     hf = h[inflight]
     r.h_max_sample = float(np.max(hf))
+    r.h_flight_std_m = float(np.std(hf)) if len(hf) >= 2 else 0.0
     # quadratic through the max and its neighbours (on the full window incl. +-0.6 s)
     im = int(np.argmax(np.where(inflight, h, -np.inf)))
     if 0 < im < len(h) - 1:
@@ -142,9 +144,9 @@ def estimate_height(t_to: float, t_land: float, press_t: np.ndarray, press: np.n
     r.baro_ok = r.baseline_ok and fit_ok and r.h_fit <= 1.3 * r.h_ballistic + 0.5
     if r.baro_ok:
         r.best, r.method = r.h_fit, "baro_fit"
-    elif r.baseline_ok and np.isfinite(r.h_quad) and np.isfinite(r.fit_rmse_m) and r.fit_rmse_m < prm.quad_rmse_max_m \
-            and r.h_quad <= 1.3 * r.h_ballistic + 0.5:
-        r.best, r.method, r.flag = r.h_quad, "baro_quad", "fit_rejected"
+    elif r.baseline_ok and np.isfinite(r.h_quad) and r.h_quad <= 1.3 * r.h_ballistic + 0.5:
+        # a healthy barometer that disagrees with the model is still the better witness
+        r.best, r.method, r.flag = r.h_quad, "baro_quad", "fit_rejected" if np.isfinite(r.fit_rmse_m) and r.fit_rmse_m < prm.quad_rmse_max_m else "baro_noisy"
     else:
         r.best, r.method, r.flag = r.h_airtime, "airtime", "baro_unreliable"
     return r

@@ -5,7 +5,7 @@ import { analyze, DEFAULT_DETECT, DEFAULT_HEIGHT, interp, jumpModel, localXY } f
 const $ = (id) => document.getElementById(id);
 const UNITS = { kmh: [3.6, 'km/h'], kn: [1.94384, 'kn'], mps: [1, 'm/s'] };
 const KMH = 3.6;
-const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS', 'takeoffMinJerkG', 'landingMinJerkG'];
+const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS', 'takeoffMinJerkG', 'landingMinJerkG', 'minRoughRefG'];
 const state = { buffer: null, name: '', fit: null, result: null, sortKey: 'jump', sortDir: 1, map: null };
 
 const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : '–';
@@ -123,9 +123,10 @@ function render() {
   $('subtitle').textContent = `${sport} · ${hms(stats.durationS)} recorded · riding ${hms(stats.ridingTimeS)} · ${state.fit.records.length} records`;
   const pill = (txt, cls = '') => `<span class="pill ${cls}">${esc(txt)}</span>`;
   const gapCls = stats.nGaps > stats.nBatches * 0.01 ? 'warn' : '';
+  const dtMs = (state.result.streams.sampleDt * 1000).toFixed(1);
   $('health').innerHTML = pill(`${stats.nBatches} accel batches`) + pill(`${stats.nDupBatches} duplicated`, stats.nDupBatches > 5 ? 'warn' : '') +
     pill(`${stats.nGaps} gaps`, gapCls) + pill(`baro ${Math.round(stats.baroValidFrac * 100)} %`, stats.baroValidFrac < 0.95 ? 'warn' : '') +
-    pill(`GPS fix ${Math.round(stats.gpsFixFrac * 100)} %`, stats.gpsFixFrac < 0.9 ? 'warn' : '') +
+    pill(`GPS fix ${Math.round(stats.gpsFixFrac * 100)} %`, stats.gpsFixFrac < 0.9 ? 'warn' : '') + pill(`${dtMs} ms/sample`) +
     (state.fit.errors.length ? pill('decoder: ' + state.fit.errors[0], 'bad') : '');
   const tiles = [
     ['Jumps', stats.jumps, ''], ['Max height', fmt(stats.maxHeightM, 1), 'm'], ['Max airtime', fmt(stats.maxAirtimeS, 2), 's'],
@@ -281,7 +282,7 @@ function exportGpx() {
   const { streams: s } = state.result;
   let g = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="kitelog" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>KiteLog session</name><trkseg>\n';
   for (let i = 0; i < s.gpsT.length; i++) if (Number.isFinite(s.lat[i]) && Number.isFinite(s.lon[i]))
-    g += `<trkpt lat="${s.lat[i].toFixed(7)}" lon="${s.lon[i].toFixed(7)}"><time>${new Date((s.gpsT[i] + s.tsOffset) * 1000).toISOString()}</time></trkpt>\n`;
+    g += `<trkpt lat="${s.lat[i].toFixed(7)}" lon="${s.lon[i].toFixed(7)}"><time>${new Date((s.gpsT[i] * s.tsSlope + s.tsOffset) * 1000).toISOString()}</time></trkpt>\n`;
   download(state.name.replace(/\.[^.]+$/, '') + '.gpx', g + '</trkseg></trk></gpx>', 'application/gpx+xml');
 }
 

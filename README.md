@@ -39,8 +39,11 @@ extension for VS Code and a developer key.
 
 Status: builds with SDK 9.3; on the watch, spikes S1 (25 Hz accelerometer batches every
 second) and S2 (all 16 developer fields, session saves) pass, and the raw barometer is
-quiet (σ ≈ 2 Pa sitting still). Still to run from `PLAN.md` §8: stairs (S3), a walk with
-*Every Second* recording (S4) and a ride (S5).
+quiet (σ ≈ 1.5–2 Pa sitting still). A 90 s indoor recording decoded cleanly: 25 samples per
+batch, contiguous sequence numbers, |f| = 1.0 g at rest, batches every 0.987 s (the
+pipeline now measures that spacing and the record-clock drift instead of assuming 1 s).
+Still to run from `PLAN.md` §8: stairs (S3), a walk with *Every Second* recording (S4) and
+a ride (S5).
 
 ## Recording a session
 

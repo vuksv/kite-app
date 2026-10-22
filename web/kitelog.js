@@ -123,33 +123,42 @@ export function buildStreams(records) {
   for (const r of recs) { if (uniq.length && uniq[uniq.length - 1].tmr === r.tmr) nDup++; else uniq.push(r); }
   if (!uniq.length) throw new Error('No KiteLog developer fields in this file (is it a KiteLog recording?)');
   const tBatch = uniq.map(r => r.tmr / 1000);
-  const tsOffset = median(uniq.map((r, i) => r.ts - tBatch[i]));
+  // measured batch spacing (~0.99 s on the Instinct 2X) -> sample spacing; linear ts<->tmr map (clocks drift ~0.2 %)
+  const db = tBatch.slice(1).map((t, i) => t - tBatch[i]).filter(d => d > 0.5 && d < 1.5);
+  const dt = (db.length >= 5 ? median(db) : 1.0) / FS;
+  let slope = 1.0, icpt = median(uniq.map((r, i) => r.ts - tBatch[i]));
+  if (uniq.length >= 20) {
+    const n = uniq.length; let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let i = 0; i < n; i++) { sx += tBatch[i]; sy += uniq[i].ts; sxx += tBatch[i] * tBatch[i]; sxy += tBatch[i] * uniq[i].ts; }
+    slope = (n * sxy - sx * sy) / (n * sxx - sx * sx); icpt = (sy - slope * sx) / n;
+  }
+  const tsOffset = icpt;
   const st = [], sf = [];
   let nGap = 0;
   uniq.forEach((r, i) => {
     const codes = unpackBatch(ACC_NAMES.map(k => r.dev[k]));
     const n = codes.length;
     if (!n) return;
-    for (let k = 0; k < n; k++) { st.push(tBatch[i] - (n - 1 - k) / FS); sf.push([decodeCode(codes[k][0]), decodeCode(codes[k][1]), decodeCode(codes[k][2])]); }
+    for (let k = 0; k < n; k++) { st.push(tBatch[i] - (n - 1 - k) * dt); sf.push([decodeCode(codes[k][0]), decodeCode(codes[k][1]), decodeCode(codes[k][2])]); }
     if (i > 0 && tBatch[i] - tBatch[i - 1] > 1.5) nGap++;
   });
   const t0 = st[0], t1 = st[st.length - 1];
-  const len = Math.round((t1 - t0) * FS) + 1;
+  const len = Math.round((t1 - t0) / dt) + 1;
   const t = new Float64Array(len);
-  for (let i = 0; i < len; i++) t[i] = t0 + i / FS;
+  for (let i = 0; i < len; i++) t[i] = t0 + i * dt;
   const fx = new Float64Array(len).fill(NaN), fy = new Float64Array(len).fill(NaN), fz = new Float64Array(len).fill(NaN);
   const valid = new Uint8Array(len);
   for (let k = 0; k < st.length; k++) {
-    const idx = Math.round((st[k] - t0) * FS);
+    const idx = Math.round((st[k] - t0) / dt);
     if (idx >= 0 && idx < len) { fx[idx] = sf[k][0]; fy[idx] = sf[k][1]; fz[idx] = sf[k][2]; valid[idx] = 1; }
   }
   return {
     t, fx, fy, fz, valid,
     pressT: Float64Array.from(tBatch), press: Float64Array.from(uniq.map(r => r.dev.press != null ? r.dev.press : NaN)),
-    gpsT: Float64Array.from(uniq.map(r => r.ts - tsOffset - 0.5)),
+    gpsT: Float64Array.from(uniq.map(r => (r.ts - icpt) / slope - 0.5)),
     lat: Float64Array.from(uniq.map(r => r.lat != null ? r.lat : NaN)), lon: Float64Array.from(uniq.map(r => r.lon != null ? r.lon : NaN)),
     speed: Float64Array.from(uniq.map(r => r.speed != null ? r.speed : NaN)),
-    tsOffset, nDup, nGap, nBatches: uniq.length,
+    tsOffset, tsSlope: slope, sampleDt: dt, nDup, nGap, nBatches: uniq.length,
     baroValidFrac: uniq.filter(r => r.dev.press != null).length / uniq.length,
     gpsFixFrac: uniq.filter(r => r.lat != null).length / uniq.length,
   };
@@ -163,6 +172,7 @@ export const DEFAULT_DETECT = {
   minSpeedMps: 3.0, minFlightSpeedMps: 2.5, minFlightSpeedRatio: 0.4, minValidFrac: 0.6, maxDataGapS: 1.5,
   maxAirtimeS: 14.0, takeoffPoint: 'peak',
   takeoffMinJerkG: 0.0, landingMinJerkG: 0.0,   // optional "large quick change" gates (g per 40 ms sample); 0 = off
+  minRoughRefG: 0.05,                            // no chop vibration around the candidate = not riding -> no evidence
 };
 
 export function computeFeatures(s, p = DEFAULT_DETECT) {
@@ -242,6 +252,7 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
     if (takeoffInGap) flags.push('takeoff_in_gap'); else if (pkTo < p.takeoffMinPeakG) reasons.push('no_takeoff_peak');
     if (landingInGap) flags.push('landing_in_gap'); else if (pkLand < p.landingMinPeakG) reasons.push('no_landing_peak');
     if (takeoffInGap && landingInGap) reasons.push('both_transients_in_gap');
+    if (p.minRoughRefG > 0 && median(F.roughRef.subarray(a, b)) < p.minRoughRefG) reasons.push('no_vibration_context');
     if (p.takeoffMinJerkG > 0 && !takeoffInGap && jerkTo < p.takeoffMinJerkG) reasons.push('no_takeoff_jerk');
     if (p.landingMinJerkG > 0 && !landingInGap && jerkLand < p.landingMinJerkG) reasons.push('no_landing_jerk');
     if (Number.isFinite(spd) && spd < p.minSpeedMps) reasons.push('slow');
@@ -278,7 +289,7 @@ export function jumpModel(T, aUp, aDn) {
 export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) {
   const T = tLand - tTo;
   const r = { hMaxSample: NaN, hQuad: NaN, hFit: NaN, hAirtime: heightFromAirtime(T, prm.aEff), hBallistic: ballisticHeight(T), best: NaN, method: '',
-    nFlightSamples: 0, fitRmseM: NaN, fitAUp: NaN, fitADn: NaN, fitLagS: NaN, baselinePrePa: NaN, baselinePostPa: NaN, baselineOk: false, baroOk: false, flag: '', samples: [] };
+    nFlightSamples: 0, hFlightStd: NaN, fitRmseM: NaN, fitAUp: NaN, fitADn: NaN, fitLagS: NaN, baselinePrePa: NaN, baselinePostPa: NaN, baselineOk: false, baroOk: false, flag: '', samples: [] };
   const pre = [], post = [];
   for (let i = 0; i < pressT.length; i++) {
     if (pressT[i] >= tTo + prm.preWin[0] && pressT[i] <= tTo + prm.preWin[1]) pre.push(press[i]);
@@ -308,6 +319,7 @@ export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) 
   let im = -1, hm = -Infinity;
   for (let i = 0; i < tt.length; i++) if (inflight[i] && hh[i] > hm) { hm = hh[i]; im = i; }
   r.hMaxSample = hm;
+  { const hf = hh.filter((_, i) => inflight[i]); const m = hf.reduce((a, b) => a + b, 0) / hf.length; r.hFlightStd = hf.length >= 2 ? Math.sqrt(hf.reduce((a, b) => a + (b - m) ** 2, 0) / hf.length) : 0; }
   if (im > 0 && im < tt.length - 1) {
     const y0 = hh[im - 1], y1 = hh[im], y2 = hh[im + 1], den = y0 - 2 * y1 + y2;
     if (den < -1e-9) { const xs = 0.5 * (y0 - y2) / den; r.hQuad = y1 - 0.25 * (y0 - y2) * xs; } else r.hQuad = y1;
@@ -333,7 +345,7 @@ export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) 
   const fitOk = Number.isFinite(r.hFit) && r.fitRmseM < Math.max(prm.fitRmseAbsM, prm.fitRmseRel * r.hFit);
   r.baroOk = r.baselineOk && fitOk && r.hFit <= 1.3 * r.hBallistic + 0.5;
   if (r.baroOk) { r.best = r.hFit; r.method = 'baro_fit'; }
-  else if (r.baselineOk && Number.isFinite(r.hQuad) && Number.isFinite(r.fitRmseM) && r.fitRmseM < prm.quadRmseMaxM && r.hQuad <= 1.3 * r.hBallistic + 0.5) { r.best = r.hQuad; r.method = 'baro_quad'; r.flag = 'fit_rejected'; }
+  else if (r.baselineOk && Number.isFinite(r.hQuad) && r.hQuad <= 1.3 * r.hBallistic + 0.5) { r.best = r.hQuad; r.method = 'baro_quad'; r.flag = (Number.isFinite(r.fitRmseM) && r.fitRmseM < prm.quadRmseMaxM) ? 'fit_rejected' : 'baro_noisy'; }
   else { r.best = r.hAirtime; r.method = 'airtime'; r.flag = 'baro_unreliable'; }
   return r;
 }
@@ -361,9 +373,12 @@ export function jumpDistance(s, tTo, tLand) {
   }
   return out;
 }
-export function baroConsistent(c, h, aFloor = 1.0) {
-  if (!h.baselineOk || !Number.isFinite(h.hFit) || c.airtime < 2.0) return true;
-  return h.hFit >= 0.5 * aFloor * c.airtime * c.airtime / 8;
+export function baroConsistent(c, h, aFloor = 1.0, quietStdM = 0.6) {
+  if (!h.baselineOk || h.nFlightSamples === 0 || c.airtime < 2.5) return true;      // no usable barometer evidence either way
+  const hMin = 0.5 * aFloor * c.airtime * c.airtime / 8;
+  const quiet = Number.isFinite(h.hFlightStd) && h.hFlightStd < quietStdM;
+  if (quiet && Number.isFinite(h.hMaxSample) && h.hMaxSample < hMin) return false;  // clean trace, no rise: not a jump
+  return true;                                                                       // wild trace (splash) proves nothing: keep, flagged
 }
 export function countTacks(s, minSpeed = 3.0, turnDeg = 100, windowS = 15) {
   const t = [], lat = [], lon = [], spd = [];
@@ -401,7 +416,7 @@ export function analyze(records, detectParams = DEFAULT_DETECT, heightParams = D
     const d = jumpDistance(s, c.tTo, c.tLand);
     let accepted = c.accepted, reason = c.rejectReason;
     if (accepted && !baroConsistent(c, h)) { accepted = false; reason = 'baro_inconsistent'; }
-    return { jump: k + 1, accepted, rejectReason: reason, flags: c.flags, tTo: c.tTo, tLand: c.tLand, tsTo: c.tTo + s.tsOffset,
+    return { jump: k + 1, accepted, rejectReason: reason, flags: c.flags, tTo: c.tTo, tLand: c.tLand, tsTo: c.tTo * s.tsSlope + s.tsOffset,
       airtime: c.airtime, height: h.best, heightMethod: h.method, heightFlag: h.flag, hFit: h.hFit, hQuad: h.hQuad, hMaxSample: h.hMaxSample,
       hAirtime: h.hAirtime, fitRmse: h.fitRmseM, fitAUp: h.fitAUp, fitADn: h.fitADn, fitLag: h.fitLagS, nBaro: h.nFlightSamples, baroSamples: h.samples,
       distance: Number.isFinite(d.distSpeed) ? d.distSpeed : d.distPos, distSpeed: d.distSpeed, distPos: d.distPos,

@@ -121,8 +121,11 @@ float path produce identical codes for every milli-g value from −9 g to +9 g.
 
 ### 3.3 Timing model
 
-* Within a batch, samples are 40 ms apart ending at `tmr` (no per-sample timestamps on API
-  3.4).  The pipeline rebuilds a uniform 25 Hz grid from `tmr`.
+* Within a batch, samples are evenly spaced ending at `tmr` (no per-sample timestamps on API
+  3.4).  Measured on the watch: batches arrive every 0.987 s with 25 samples, i.e. the
+  sensor runs at ~25.3 Hz, and the record clock drifts ~0.2 % against `System.getTimer()`.
+  The pipeline therefore takes the sample spacing from the median batch interval and maps
+  `tmr` to record time with a linear fit, not a constant offset.
 * The FIT writer ticks on its own 1 Hz clock.  If two batches arrive between writes one is
   lost; if none arrive the previous one is written again → duplicates and gaps are
   **detected from `seq`** and handled (duplicates dropped, gaps bridged for filtering, flagged

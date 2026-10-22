@@ -100,6 +100,8 @@ Keep the FIT files: every tuning change can be replayed over all sessions with
 
 | symptom | cause / fix |
 |---|---|
+| an indoor / sitting-still test shows a "jump" | fixed in the Oct 2026 pipeline: at rest there is no chop vibration, so a wrist movement used to pass as a flight and the airtime formula invented a height. Candidates now need riding vibration around them (*Min riding vibration*), and a healthy barometer that shows no rise rejects the jump instead of falling back to the airtime model |
+| GPS speed of 10–15 km/h while standing still | indoor fix jitter; the watch display floors it, the FIT keeps the raw Doppler speed. On the water with a real fix this disappears |
 | "No KiteLog developer fields in this file" | the file is a normal watch activity, or the app failed to create its FIT fields (spike S2 in PLAN.md) |
 | many gaps, batches < records | *Data Recording* on Smart, or the accelerometer listener stalled (power-cycle the watch) |
 | baro 0 % | `rawAmbientPressure` returned null on this firmware – see fallbacks in PLAN.md §8 |

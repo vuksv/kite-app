@@ -137,7 +137,7 @@ def export_gpx(s: Streams, path: str, name="KiteLog session"):
     ok = np.isfinite(s.lat) & np.isfinite(s.lon)
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<gpx version="1.1" creator="kitelog" xmlns="http://www.topografix.com/GPX/1/1">',
              f"<trk><name>{name}</name><trkseg>"]
-    for la, lo, t in zip(s.lat[ok], s.lon[ok], s.gps_t[ok] + s.ts_offset):
+    for la, lo, t in zip(s.lat[ok], s.lon[ok], s.gps_t[ok] * s.ts_slope + s.ts_offset):
         iso = dt.datetime.fromtimestamp(t, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         lines.append(f'<trkpt lat="{la:.7f}" lon="{lo:.7f}"><time>{iso}</time></trkpt>')
     lines += ["</trkseg></trk></gpx>"]
