@@ -1,0 +1,11 @@
+# Connect IQ build output
+bin/
+
+# Developer signing keys
+*.der
+*.pem
+
+# Editor workspace files
+*.code-workspace
+.vscode/
+.DS_Store
