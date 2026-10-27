@@ -1,10 +1,11 @@
-# Publishes web/ to GitHub Pages: https://vuksv.github.io/kite-app/
-# One-time setup: repository Settings > Pages > Source = "GitHub Actions".
+# Publishes the report app to GitHub Pages: https://vuksv.github.io/kite-app/
+# Works with either Pages source: "GitHub Actions" (this workflow) or "Deploy from a branch"
+# (the root index.html redirects to web/).
 name: Deploy report app to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", ".github/workflows/pages.yml"]
+    paths: ["web/**", "index.html", "docs/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,9 +22,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Stage site (app at the root, also under /web, docs alongside)
+        run: |
+          mkdir -p _site/web _site/docs
+          cp -r web/. _site/
+          cp -r web/. _site/web/
+          cp -r docs/. _site/docs/
+          touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

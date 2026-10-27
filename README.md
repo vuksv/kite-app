@@ -60,13 +60,21 @@ Phone: export the activity from connect.garmin.com (*Export Original*), open the
 (`web/index.html`, or the GitHub Pages URL once enabled) and pick the zip. Computer: the same,
 or `python tools/analyze.py file.fit --plots`. Details in `docs/ANALYSIS.md`.
 
+## Going on a trip with only the phone
+
+See `docs/TRIP.md`: a 30-minute pre-flight check (prove sync + export once), the on-water
+routine, and how to change the analysis from the phone (settings on the page, or edit and
+push from Claude Code / GitHub – Pages republishes in about a minute).
+
 ## Hosting and cloud (optional)
 
 * `.github/workflows/pages.yml` publishes `web/` to GitHub Pages
   (`https://vuksv.github.io/kite-app/`) – enable *Settings › Pages › Source: GitHub Actions*.
 * `cloud/` + `Dockerfile` + `.github/workflows/deploy-cloud-run.yml`: a Cloud Run service
   that archives every uploaded session in a bucket and runs the Python pipeline server-side.
-  Secrets, variables and the `gcloud` setup are in `docs/CLOUD.md`.
+  One-shot setup: `bash cloud/setup.sh <project-id>` in Cloud Shell, paste the printed
+  secrets into GitHub, run the workflow once. Details in `docs/CLOUD.md`. The workflow skips
+  itself until the secrets exist.
 * `.github/workflows/test.yml` runs the Python tests, a short validation and the JS parity
   test on every push.
 

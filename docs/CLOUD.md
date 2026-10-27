@@ -29,6 +29,10 @@ the exact same code as `tools/`, which is simpler.
 
 ## One-time Google Cloud setup
 
+Fastest: open [Cloud Shell](https://shell.cloud.google.com) (works from the phone browser),
+clone the repo and run `bash cloud/setup.sh <project-id>`; it performs everything below and
+prints the GitHub secrets/variables and the upload token. Manual steps for reference:
+
 ```bash
 PROJECT=<your-project-id>; REGION=us-central1; BUCKET=<globally-unique-bucket-name>
 gcloud config set project $PROJECT

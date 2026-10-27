@@ -37,16 +37,25 @@
         <label class="field">Take-off jerk min (g/sample, 0 = off)<input id="takeoffMinJerkG" type="number" step="0.1" value="0"></label>
         <label class="field">Landing jerk min (g/sample, 0 = off)<input id="landingMinJerkG" type="number" step="0.1" value="0"></label>
       </div>
-      <h3>Cloud archive (optional, see docs/CLOUD.md)</h3>
-      <div class="grid">
-        <label class="field">Service URL<input id="cloudUrl" type="url" placeholder="https://kitelog-xxxx.run.app"></label>
-        <label class="field">Token<input id="cloudToken" type="password" placeholder="KITELOG_TOKEN"></label>
-      </div>
+
       <div class="row" style="margin-top:10px">
         <label><input id="showRejected" type="checkbox"> show rejected candidates</label>
         <button id="rerun" type="button" disabled>Re-analyse</button>
         <button id="resetSettings" type="button">Defaults</button>
       </div>
+    </details>
+  </section>
+
+  <section class="card noprint">
+    <details id="cloudBox">
+      <summary>Cloud archive</summary>
+      <p style="font-size:13px">Your own Cloud Run service (docs/CLOUD.md). Files you upload are stored there and can be re-analysed from any device with the latest pipeline.</p>
+      <div class="grid" style="margin-top:6px">
+        <label class="field">Service URL<input id="cloudUrl" type="url" placeholder="https://kitelog-xxxx.run.app"></label>
+        <label class="field">Token<input id="cloudToken" type="password" placeholder="KITELOG_TOKEN"></label>
+      </div>
+      <div class="row" style="margin-top:8px"><button id="listBtn" type="button">List archived sessions</button></div>
+      <div id="sessions" style="margin-top:8px"></div>
     </details>
   </section>
 

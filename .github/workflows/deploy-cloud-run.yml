@@ -1,7 +1,7 @@
-# Deploys the KiteLog service (cloud/) to Cloud Run.  See docs/CLOUD.md for the one-time
-# Google Cloud setup and the GitHub secrets/variables this needs:
+# Deploys the KiteLog service (cloud/) to Cloud Run.  Skips quietly until the GitHub secrets
+# exist - run cloud/setup.sh once and paste its output into Settings > Secrets and variables.
 #   secrets:   GCP_PROJECT_ID, and either GCP_SA_KEY (service-account JSON key)
-#              or GCP_WIF_PROVIDER + GCP_SA_EMAIL (Workload Identity Federation, recommended)
+#              or GCP_WIF_PROVIDER + GCP_SA_EMAIL (Workload Identity Federation)
 #   variables: GCP_REGION (default us-central1), KITELOG_BUCKET, KITELOG_SERVICE (default kitelog)
 name: Deploy to Cloud Run
 on:
@@ -13,7 +13,19 @@ permissions:
   contents: read
   id-token: write
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.c.outputs.configured }}
+    steps:
+      - id: c
+        env:
+          P: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          if [ -n "$P" ]; then echo "configured=true" >> "$GITHUB_OUTPUT"; else echo "configured=false" >> "$GITHUB_OUTPUT"; echo "GCP_PROJECT_ID secret not set - skipping deploy (see docs/CLOUD.md)"; fi
   deploy:
+    needs: check
+    if: needs.check.outputs.configured == 'true'
     runs-on: ubuntu-latest
     env:
       REGION: ${{ vars.GCP_REGION || 'us-central1' }}
@@ -36,6 +48,7 @@ jobs:
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --allow-unauthenticated \
             --memory 1Gi --cpu 1 --min-instances 0 --max-instances 2 \
+            --service-account "kitelog-run@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
             --set-env-vars "KITELOG_BUCKET=${{ vars.KITELOG_BUCKET }}" \
             --set-secrets "KITELOG_TOKEN=kitelog-token:latest"
-      - run: gcloud run services describe "$SERVICE" --region "$REGION" --project "${{ secrets.GCP_PROJECT_ID }}" --format='value(status.url)'
+      - run: echo "Service URL:" && gcloud run services describe "$SERVICE" --region "$REGION" --project "${{ secrets.GCP_PROJECT_ID }}" --format='value(status.url)'

@@ -24,10 +24,22 @@ function readParams() {
   const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || 3.2 };
   return { d, h };
 }
-function setDefaults() {
+function applyDefaults() {
   for (const id of PARAM_IDS) $(id).value = DEFAULT_DETECT[id];
   $('minSpeedKmh').value = +(DEFAULT_DETECT.minSpeedMps * KMH).toFixed(1);
   $('aEff').value = DEFAULT_HEIGHT.aEff;
+}
+function setDefaults() {                       // the Defaults button: also forget persisted tweaks
+  applyDefaults();
+  try { localStorage.removeItem('kitelog.params'); } catch (e) { /* ignore */ }
+}
+// analysis settings changed on the phone persist between visits (Defaults clears them)
+function saveParams() {
+  const o = {}; for (const id of [...PARAM_IDS, 'minSpeedKmh', 'aEff', 'unit']) o[id] = $(id).value;
+  try { localStorage.setItem('kitelog.params', JSON.stringify(o)); } catch (e) { /* ignore */ }
+}
+function loadParams() {
+  try { const o = JSON.parse(localStorage.getItem('kitelog.params') || 'null'); if (o) for (const k in o) if ($(k)) $(k).value = o[k]; } catch (e) { /* ignore */ }
 }
 
 // ------------------------------------------------------------------ loading
@@ -293,6 +305,29 @@ function loadCloudSettings() {
   try { const c = JSON.parse(localStorage.getItem('kitelog.cloud') || 'null'); if (c) { $('cloudUrl').value = c.url || ''; $('cloudToken').value = c.token || ''; } } catch (e) { /* ignore */ }
   if (!$('cloudUrl').value && location.protocol.startsWith('http') && !/github\.io|localhost|127\.0\.0\.1/.test(location.host)) $('cloudUrl').value = location.origin;
 }
+async function listSessions() {
+  const { url, token } = cloudSettings();
+  const el = $('sessions');
+  if (!url) { el.textContent = 'Enter the service URL first.'; return; }
+  saveCloudSettings();
+  el.textContent = 'Loading …';
+  try {
+    const r = await fetch(url + '/api/sessions', { headers: token ? { 'X-KiteLog-Token': token } : {} });
+    if (!r.ok) throw new Error(r.status + ' ' + (await r.text()).slice(0, 120));
+    const list = await r.json();
+    if (!list.length) { el.textContent = 'Archive is empty.'; return; }
+    el.innerHTML = '<table><thead><tr><th>session</th><th></th></tr></thead><tbody>' + list.map(x =>
+      `<tr><td>${esc(x.session_id)}</td><td><button type="button" data-sid="${esc(x.session_id)}">Open</button></td></tr>`).join('') + '</tbody></table>';
+    el.querySelectorAll('button[data-sid]').forEach(b => b.onclick = async () => {
+      const sid = b.dataset.sid;
+      setStatus('Fetching ' + sid + ' from the archive …');
+      const rr = await fetch(`${url}/api/sessions/${encodeURIComponent(sid)}/activity.fit`, { headers: token ? { 'X-KiteLog-Token': token } : {} });
+      if (!rr.ok) { setStatus('Fetch failed: ' + rr.status, true); return; }
+      loadBuffer(await rr.arrayBuffer(), sid + '.fit');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  } catch (e) { el.textContent = 'Could not list sessions: ' + (e.message || e); }
+}
 async function uploadToCloud() {
   const { url, token } = cloudSettings();
   const el = $('cloudStatus');
@@ -318,15 +353,19 @@ $('sampleBtn').addEventListener('click', async () => {
 });
 $('rerun').addEventListener('click', run);
 $('resetSettings').addEventListener('click', () => { setDefaults(); if (state.fit) run(); });
-$('unit').addEventListener('change', () => { if (state.result) render(); });
+$('unit').addEventListener('change', () => { saveParams(); if (state.result) render(); });
 $('showRejected').addEventListener('change', () => { if (state.result) renderTable(); });
 $('csvBtn').addEventListener('click', exportCsv);
 $('gpxBtn').addEventListener('click', exportGpx);
 $('printBtn').addEventListener('click', () => window.print());
 $('mapBtn').addEventListener('click', showMap);
 $('cloudBtn').addEventListener('click', uploadToCloud);
+$('listBtn').addEventListener('click', listSessions);
+for (const id of [...PARAM_IDS, 'minSpeedKmh', 'aEff']) $(id).addEventListener('change', saveParams);
 $('cloudUrl').addEventListener('change', saveCloudSettings);
 $('cloudToken').addEventListener('change', saveCloudSettings);
-setDefaults();
+applyDefaults();
+loadParams();
 loadCloudSettings();
+if (cloudSettings().url) $('cloudBox').open = true;
 if (location.search.includes('sample')) $('sampleBtn').click();
