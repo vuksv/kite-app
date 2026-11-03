@@ -1,0 +1,37 @@
+# Post a session as a GitHub issue (attach the Garmin "Export Original" zip or the .fit) and
+# this workflow analyses it with the Python pipeline, comments the summary and keeps the
+# file + plots as a private workflow artifact (90 days, visible to repo collaborators only).
+name: Analyse session from issue
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  analyse:
+    if: ${{ !github.event.issue.pull_request && (github.event_name == 'issues' || github.event.comment.user.login == github.event.issue.user.login || github.event.comment.author_association == 'OWNER') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r tools/requirements.txt
+      - name: Save the body
+        env:
+          BODY: ${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}
+        run: printf '%s' "$BODY" > body.txt
+      - name: Analyse attachments
+        run: python tools/issue_analyze.py body.txt out
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body-file out/comment.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: session-${{ github.event.issue.number }}-${{ github.run_id }}
+          path: out
+          retention-days: 90

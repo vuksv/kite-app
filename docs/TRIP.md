@@ -25,6 +25,16 @@ After every session: sync, Export Original, open the report, **Upload to cloud a
 keep the zip in the phone's Files app). Keep every file – a later pipeline fix re-analyses all
 of them.
 
+## Sending a session for analysis without a laptop (GitHub only)
+
+Open a new issue at <https://github.com/vuksv/kite-app/issues/new>, attach the Garmin
+*Export Original* zip (or the .fit) in the text box and submit. The *Analyse session from
+issue* workflow runs the Python pipeline and comments the summary (jump table, rejected
+candidates, data health) within ~2 minutes; the file, `jumps.csv` and the plots are kept as a
+workflow artifact (collaborators only, 90 days). Attaching a new file in a comment on the same
+issue re-runs it. The issue itself is public on a public repository; attachments are unlisted
+but reachable by link.
+
 ## Changing the analysis from the phone
 
 The analysis is a static page; GitHub rebuilds and republishes it within about a minute of
