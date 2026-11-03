@@ -14,7 +14,7 @@ ap.add_argument("input", help=".fit or records.csv")
 ap.add_argument("--out", default=None)
 ap.add_argument("--truth", default=None, help="truth.json from the simulator (adds comparison)")
 ap.add_argument("--plots", action="store_true")
-ap.add_argument("--a-eff", type=float, default=3.2, help="airtime-model net acceleration (m/s^2)")
+ap.add_argument("--a-eff", type=float, default=2.5, help="airtime-model net acceleration (m/s^2)")
 a = ap.parse_args()
 out = a.out or os.path.splitext(a.input)[0] + "_analysis"
 os.makedirs(out, exist_ok=True)

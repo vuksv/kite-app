@@ -104,6 +104,12 @@ Keep the FIT files: every tuning change can be replayed over all sessions with
 * A clean jump: 3.5 g pop, 0.69 g while flying, impact 4.8 g **1.7 s after the vibration
   first came back** (kite steering in the descent) – hence the 2.5 s landing window and the
   "first impact, not biggest" rule.
+* The rider reported a jump on ~70 % of 21 turns, biggest ≤ 4–5 m. The detector found one
+  by the "smooth stretch" rule; the other 14 show as **pop → impact pairs** (2.6–3.8 g, then
+  3.2–5.9 g, 2.7–4.1 s apart) with a middle at 0.83–0.96 g and roughness 0.5–1.2× riding –
+  the wrist is not still in the air. That pair signature is now the second candidate
+  generator (`pair_*` settings); jumped transitions nearly stop, so no speed-collapse gate
+  for them. `a_eff` lowered to 2.5 m/s² to match the reported heights (rough calibration).
 * The barometer is useless on the water as worn: steps of hundreds of Pa (water on the
   port) and no visible rise even on that clean jump. Heights therefore come from the airtime
   model (`a_eff`, to be calibrated against video/WOO); the barometer veto is off by default.

@@ -98,7 +98,7 @@ class JumpModel:
         return cls(v0=v0, a_up=a_up, a_dn=a_dn)
 
 
-def height_from_airtime(airtime: float, a_eff: float = 3.2) -> float:
+def height_from_airtime(airtime: float, a_eff: float = 2.5) -> float:
     """Symmetric-model fallback h = a_eff T^2 / 8.  a_eff ~ 3.2 m/s^2 reproduces
     the 28.6 m / 8.5 s reference jump; calibrate per rider from baro-validated jumps."""
     return a_eff * airtime ** 2 / 8.0

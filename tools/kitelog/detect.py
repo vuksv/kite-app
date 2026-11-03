@@ -63,6 +63,16 @@ class DetectParams:
     # pop was violent; transitions/water starts show ~1.0-1.3 g with a weak 1.4-1.6 g bump
     max_level_without_pop_g: float = 0.95
     pop_peak_g: float = 2.0
+    # Second candidate generator, "impulse pair": a pop and an impact bracketing a quiet-ish
+    # middle.  Measured on the first real session: pops 2.6-3.8 g, impacts 3.2-5.9 g,
+    # 2.7-4.1 s apart, middle level 0.83-0.96 g with nothing above 2 g, roughness 0.5-1.2 x riding.
+    pair_pop_g: float = 2.5
+    pair_impact_g: float = 2.5
+    pair_min_s: float = 1.0
+    pair_max_s: float = 8.0
+    pair_mid_max_peak_g: float = 2.0
+    pair_mid_max_level_g: float = 1.0
+    pair_mid_max_rough_ratio: float = 1.2
     baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
                                      # first real session showed no baro rise even on a clean 3 s jump
 
@@ -236,6 +246,7 @@ class JumpCandidate:
     flags: str = ""
     takeoff_jerk_g: float = float("nan")
     landing_jerk_g: float = float("nan")
+    source: str = "smooth"
 
 
 def _last_peak(x, a0, a1, thr):
@@ -367,10 +378,68 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
         if not np.isnan(spd) and spd < p.min_speed_mps:
             reasons.append("slow")
         if not np.isnan(spd_min) and spd_min < max(p.min_flight_speed_mps, p.min_flight_speed_ratio * spd):
-            reasons.append("speed_collapse")      # transitions / crashes: speed dies while a jump keeps most of it
+            reasons.append("speed_collapse")      # transitions / crashes: speed dies while a jump keeps most of it (smooth candidates only)
         if airtime <= 0.3 or airtime > p.max_airtime_s:
             reasons.append("airtime_range")
         c.accepted = not reasons
         c.reject_reason = ",".join(reasons)
         cands.append(c)
+    cands.extend(_impulse_pairs(s, F, p, cands))
+    cands.sort(key=lambda c: c.t_to)
     return cands, F
+
+
+def _impulse_pairs(s, F, p, existing):
+    """Pop -> impact pairs with a quiet middle (see DetectParams).  Jumped transitions nearly
+    stop in the air, so the speed-collapse gate is not applied here."""
+    n = len(F.t)
+    pk, _ = signal.find_peaks(F.m4, height=p.pair_pop_g, distance=8)
+    out = []
+    for a in pk:
+        lo, hi = a + int(p.pair_min_s * FS), min(n, a + int(p.pair_max_s * FS))
+        if hi <= lo:
+            continue
+        nxt = [b for b in pk if lo <= b < hi]
+        if not nxt:
+            continue
+        b = int(nxt[0])
+        if F.m4[b] < p.pair_impact_g:
+            continue
+        i0, i1 = a + int(0.3 * FS), b - int(0.2 * FS)
+        if i1 - i0 < int(0.4 * FS):
+            continue
+        mid_rough = np.nanmedian(np.where(np.isinf(F.rough[i0:i1]), np.nan, F.rough[i0:i1]))
+        ref = float(np.nanmedian(F.rough_ref[i0:i1]))
+        level = float(np.nanmedian(F.m1[i0:i1]))
+        if np.nanmax(F.m4[i0:i1]) >= p.pair_mid_max_peak_g or level > p.pair_mid_max_level_g or mid_rough > p.pair_mid_max_rough_ratio * ref:
+            continue
+        if s.valid[a:b].mean() < p.min_valid_frac:
+            continue
+        t_to = F.t[a]
+        i_raw = b - int(0.3 * FS) + int(np.nanargmax(F.mag_f[b - int(0.3 * FS):b + int(0.3 * FS)]))
+        k = i_raw
+        while k > a and F.mag_f[k] > level + p.landing_rise_g:
+            k -= 1
+        k = min(k + 1, i_raw)
+        t_land = F.t[k]
+        airtime = t_land - t_to
+        if any(c.accepted and c.t_to < t_land and c.t_land > t_to for c in existing):
+            continue
+        spd = float(np.interp(t_to, F.t, F.speed)) if np.isfinite(F.speed).any() else np.nan
+        reasons = []
+        if not np.isnan(spd) and spd < p.min_speed_mps:
+            reasons.append("slow")
+        if airtime <= 0.3 or airtime > p.max_airtime_s:
+            reasons.append("airtime_range")
+        if p.min_rough_ref_g > 0 and ref < p.min_rough_ref_g:
+            reasons.append("no_vibration_context")
+        c = JumpCandidate(F.t[i0], F.t[i1], t_to, t_land, airtime, float(F.m4[a]), float(F.m4[b]), level,
+                          float(mid_rough), ref, spd)
+        c.accepted = not reasons
+        c.reject_reason = ",".join(reasons)
+        c.flags = "impulse_pair"
+        c.source = "pair"
+        c.takeoff_jerk_g = float(F.jerk[max(0, a - 5):a + 5].max())
+        c.landing_jerk_g = float(F.jerk[max(0, b - 5):b + 5].max())
+        out.append(c)
+    return out
