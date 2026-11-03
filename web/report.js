@@ -346,6 +346,24 @@ async function uploadToCloud() {
   } catch (e) { el.className = 'status err'; el.textContent = 'Upload failed: ' + (e.message || e); }
 }
 
+// ------------------------------------------------------------------ recorded sessions (sessions/sessions.json on the site)
+async function loadFromUrl(url) {
+  try {
+    setStatus('Loading ' + url + ' …');
+    const r = await fetch(url); if (!r.ok) throw new Error(r.status);
+    await loadBuffer(await r.arrayBuffer(), url.split('/').pop());
+  } catch (e) { setStatus('Could not load ' + url + ': ' + (e.message || e), true); }
+}
+async function listRecorded() {
+  try {
+    const r = await fetch('sessions/sessions.json', { cache: 'no-cache' }); if (!r.ok) return;
+    const list = await r.json(); if (!list.length) return;
+    const el = $('recorded'); el.classList.remove('hidden');
+    el.innerHTML = '<h2 style="margin-top:0">Recorded sessions</h2><div class="row">' + list.map(e =>
+      `<a class="btn" href="?fit=sessions/${encodeURIComponent(e.file)}">${esc(e.start_utc.slice(0, 10))} · ${esc(e.label)}</a>`).join('') + '</div>';
+  } catch (e) { /* no list on this host */ }
+}
+
 // ------------------------------------------------------------------ wiring
 $('file').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) loadBuffer(await f.arrayBuffer(), f.name); });
 $('sampleBtn').addEventListener('click', async () => {
@@ -369,4 +387,6 @@ applyDefaults();
 loadParams();
 loadCloudSettings();
 if (cloudSettings().url) $('cloudBox').open = true;
-if (location.search.includes('sample')) $('sampleBtn').click();
+listRecorded();
+const fitParam = new URLSearchParams(location.search).get('fit');
+if (fitParam) loadFromUrl(fitParam); else if (location.search.includes('sample')) $('sampleBtn').click();

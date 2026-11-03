@@ -5,7 +5,7 @@ name: Deploy report app to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", "index.html", "docs/**", ".github/workflows/pages.yml"]
+    paths: ["web/**", "index.html", "docs/**", "sessions/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,6 +28,7 @@ jobs:
           cp -r web/. _site/
           cp -r web/. _site/web/
           cp -r docs/. _site/docs/
+          if [ -d sessions ]; then mkdir -p _site/sessions _site/web/sessions && cp -r sessions/. _site/sessions/ && cp -r sessions/. _site/web/sessions/; fi
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
