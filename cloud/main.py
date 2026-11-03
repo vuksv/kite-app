@@ -125,7 +125,7 @@ async def analyze(request: Request, file: UploadFile = File(...)):
         raise HTTPException(400, f"no KiteLog developer data: {e}")
     cands, F = detect_jumps(s, DetectParams())
     heights = [estimate_height(c.t_to, c.t_land, s.press_t, s.press, HeightParams()) for c in cands]
-    jumps = jumps_table(s, cands, heights)
+    jumps = jumps_table(s, cands, heights, baro_gate=False)
     stats = session_stats(s, jumps)
     start = dt.datetime.fromtimestamp(float(rec["ts"].iloc[0]), dt.timezone.utc)
     sid = start.strftime("%Y-%m-%d_%H%M") + "_" + hashlib.sha1(raw).hexdigest()[:8]

@@ -31,7 +31,7 @@ print(f"streams: {len(s.t)} samples, valid {s.valid.mean():.4f}, batches {s.n_ba
 cands, F = detect_jumps(s, DetectParams())
 hp = HeightParams(a_eff=a.a_eff)
 heights = [estimate_height(c.t_to, c.t_land, s.press_t, s.press, hp) for c in cands]
-jumps = jumps_table(s, cands, heights)
+jumps = jumps_table(s, cands, heights, baro_gate=False)
 stats = session_stats(s, jumps)
 jumps.to_csv(os.path.join(out, "jumps.csv"), index=False)
 json.dump(asdict(stats), open(os.path.join(out, "session.json"), "w"), indent=1)

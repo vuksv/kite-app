@@ -96,6 +96,20 @@ produces a synthetic session with ground truth for testing either pipeline.
 Keep the FIT files: every tuning change can be replayed over all sessions with
 `tools/analyze.py` or the report app.
 
+## 4b. What the first real session (Brazil, Nov 2026) showed
+
+* Riding vibration on the wrist: roughness median 0.13 g (5th–95th percentile 0.06–0.34 g);
+  in the air it collapses to 0.02–0.05 g. |f| while riding averages 1.1 g with chop slams
+  to 4–7 g that are *not* jumps (no smooth stretch after them).
+* A clean jump: 3.5 g pop, 0.69 g while flying, impact 4.8 g **1.7 s after the vibration
+  first came back** (kite steering in the descent) – hence the 2.5 s landing window and the
+  "first impact, not biggest" rule.
+* The barometer is useless on the water as worn: steps of hundreds of Pa (water on the
+  port) and no visible rise even on that clean jump. Heights therefore come from the airtime
+  model (`a_eff`, to be calibrated against video/WOO); the barometer veto is off by default.
+* Pauses show up as long gaps in the batch clock, not as data loss; 35 of 1883 batches
+  were dropped by the FIT writer (expected, flagged).
+
 ## 5. Troubleshooting
 
 | symptom | cause / fix |

@@ -33,6 +33,8 @@
         <label class="field">Flight level max (g)<input id="levelMaxG" type="number" step="0.05" value="1.45"></label>
         <label class="field">Min take-off speed (km/h)<input id="minSpeedKmh" type="number" step="1" value="10.8"></label>
         <label class="field">Min smooth time (s)<input id="minSmoothS" type="number" step="0.04" value="0.32"></label>
+        <label class="field">Kite support: max flight level without a pop (g)<input id="maxLevelWithoutPopG" type="number" step="0.05" value="0.95"></label>
+        <label class="field">Pop peak that proves a jump (g)<input id="popPeakG" type="number" step="0.1" value="2.0"></label>
         <label class="field">Min riding vibration (g, rejects rest/walking)<input id="minRoughRefG" type="number" step="0.01" value="0.05"></label>
         <label class="field">Take-off jerk min (g/sample, 0 = off)<input id="takeoffMinJerkG" type="number" step="0.1" value="0"></label>
         <label class="field">Landing jerk min (g/sample, 0 = off)<input id="landingMinJerkG" type="number" step="0.1" value="0"></label>
@@ -40,6 +42,7 @@
 
       <div class="row" style="margin-top:10px">
         <label><input id="showRejected" type="checkbox"> show rejected candidates</label>
+        <label><input id="baroGate" type="checkbox"> let a clean barometer veto jumps (off: port gets wet on the water)</label>
         <button id="rerun" type="button" disabled>Re-analyse</button>
         <button id="resetSettings" type="button">Defaults</button>
       </div>

@@ -43,14 +43,14 @@ class DetectParams:
     merge_gap_s: float = 0.6         # blips inside the flight (kite re-trim at the apex) are bridged if no impact in between
     takeoff_search_s: float = 1.2
     takeoff_min_peak_g: float = 1.35
-    landing_search_s: float = 0.9
+    landing_search_s: float = 2.5     # first real jump: impact 1.7 s after the smooth stretch ended (kite steering in the descent)
     landing_min_peak_g: float = 1.6
     landing_rise_g: float = 0.5
     min_speed_mps: float = 3.0
     min_flight_speed_mps: float = 2.5
     min_valid_frac: float = 0.6
     max_data_gap_s: float = 1.5
-    min_flight_speed_ratio: float = 0.4
+    min_flight_speed_ratio: float = 0.3
     max_airtime_s: float = 14.0
     takeoff_point: str = "peak"      # "peak" = load-pulse maximum, "mid" = half-way down the pulse
     # Optional "large quick change" gates on the sample-to-sample jump of |f| (g per 40 ms).
@@ -58,6 +58,13 @@ class DetectParams:
     takeoff_min_jerk_g: float = 0.0
     landing_min_jerk_g: float = 0.0
     min_rough_ref_g: float = 0.05    # no chop vibration around the candidate = not riding (rest, walking): no "vibration drop" evidence
+    bridge_rough_ratio: float = 1.0
+    # "kite support": in a real jump either the kite carries you (|f| level well below 1 g) or the
+    # pop was violent; transitions/water starts show ~1.0-1.3 g with a weak 1.4-1.6 g bump
+    max_level_without_pop_g: float = 0.95
+    pop_peak_g: float = 2.0
+    baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
+                                     # first real session showed no baro rise even on a clean 3 s jump
 
 
 @dataclass
@@ -297,7 +304,18 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
             t_to = F.t[i_pk]
         # landing: impact onset after the smooth stretch
         b1 = min(n, b + int(p.landing_search_s * FS))
-        i_lp = b + int(np.argmax(F.m4[b:b1])) if b1 > b else b
+        # landing = the FIRST impact above threshold after the smooth stretch (not the biggest
+        # one in the window); the stretch in between must not look like riding again
+        hits = np.flatnonzero(F.m4[b:b1] >= p.landing_min_peak_g)
+        if len(hits):
+            i0 = b + int(hits[0])
+            i_lp = i0 + int(np.argmax(F.m4[i0:min(b1, i0 + int(0.4 * FS))]))
+            if i0 - b > int(0.5 * FS):
+                bridge = np.where(np.isinf(F.rough[b:i0]), np.nan, F.rough[b:i0])
+                if np.nanmedian(bridge) > p.bridge_rough_ratio * float(np.nanmedian(F.rough_ref[b:i0])):
+                    i_lp = b + int(np.argmax(F.m4[b:b + int(0.5 * FS)]))      # riding resumed before the impact: not ours
+        else:
+            i_lp = b + int(np.argmax(F.m4[b:b1])) if b1 > b else b
         pk_land = float(F.m4[i_lp])
         landing_in_gap = False
         if pk_land < p.landing_min_peak_g and (~s.valid[b:b1]).any():
@@ -312,7 +330,7 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
             k = min(k + 1, i_raw)
         t_land = F.t[k]
         airtime = t_land - t_to
-        spd = float(F.speed[a]) if not np.isnan(F.speed[a]) else np.nan
+        spd = float(np.interp(t_to, F.t, F.speed)) if not np.isnan(F.speed[a]) else np.nan   # speed at the take-off instant
         fl = F.speed[a:b]
         spd_min = float(np.nanmin(fl)) if np.isfinite(fl).any() else np.nan
         c = JumpCandidate(F.t[a], F.t[b - 1], t_to, t_land, airtime, pk_to, pk_land, flight_level,
@@ -332,6 +350,8 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
             reasons.append("no_landing_peak")
         if takeoff_in_gap and landing_in_gap:
             reasons.append("both_transients_in_gap")
+        if flight_level >= p.max_level_without_pop_g and not (pk_to >= p.pop_peak_g):
+            reasons.append("no_kite_support")
         if p.min_rough_ref_g > 0 and float(np.nanmedian(F.rough_ref[a:b])) < p.min_rough_ref_g:
             reasons.append("no_vibration_context")
         if p.takeoff_min_jerk_g > 0 and not takeoff_in_gap and F.jerk[a0:a1].max() < p.takeoff_min_jerk_g:

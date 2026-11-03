@@ -5,7 +5,7 @@ import { analyze, DEFAULT_DETECT, DEFAULT_HEIGHT, interp, jumpModel, localXY } f
 const $ = (id) => document.getElementById(id);
 const UNITS = { kmh: [3.6, 'km/h'], kn: [1.94384, 'kn'], mps: [1, 'm/s'] };
 const KMH = 3.6;
-const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS', 'takeoffMinJerkG', 'landingMinJerkG', 'minRoughRefG'];
+const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS', 'takeoffMinJerkG', 'landingMinJerkG', 'minRoughRefG', 'maxLevelWithoutPopG', 'popPeakG'];
 const state = { buffer: null, name: '', fit: null, result: null, sortKey: 'jump', sortDir: 1, map: null };
 
 const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : '–';
@@ -19,6 +19,7 @@ function setStatus(msg, err = false) { const el = $('status'); el.textContent = 
 function readParams() {
   const d = { ...DEFAULT_DETECT };
   for (const id of PARAM_IDS) { const v = parseFloat($(id).value); if (Number.isFinite(v)) d[id] = v; }
+  d.baroGate = $('baroGate').checked;
   const vMin = parseFloat($('minSpeedKmh').value);        // entered in km/h, detector works in m/s
   if (Number.isFinite(vMin)) d.minSpeedMps = vMin / KMH;
   const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || 3.2 };

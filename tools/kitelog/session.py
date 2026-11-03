@@ -61,12 +61,12 @@ def baro_consistent(c: JumpCandidate, h: HeightResult, a_floor: float = 1.0, qui
     return True                          # a wild trace (splash) proves nothing either way: keep, flagged by the height method
 
 
-def jumps_table(s: Streams, cands: list[JumpCandidate], heights: list[HeightResult]) -> pd.DataFrame:
+def jumps_table(s: Streams, cands: list[JumpCandidate], heights: list[HeightResult], baro_gate: bool = False) -> pd.DataFrame:
     rows = []
     for k, (c, h) in enumerate(zip(cands, heights)):
         d = jump_distance(s, c.t_to, c.t_land)
         accepted, reason = c.accepted, c.reject_reason
-        if accepted and not baro_consistent(c, h):
+        if baro_gate and accepted and not baro_consistent(c, h):
             accepted, reason = False, "baro_inconsistent"
         rows.append(dict(
             jump=k + 1,

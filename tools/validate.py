@@ -29,11 +29,6 @@ def run(scenario, n_sessions, duration, seed0):
         used = set()
         for j in truth["jumps"]:
             m = [i for i, c in enumerate(cands) if c.t_to < j["t_land"] + off and c.t_land > j["t_to"] + off]
-            if m and cands[m[0]].accepted:
-                hh = estimate_height(cands[m[0]].t_to, cands[m[0]].t_land, s.press_t, s.press, HeightParams())
-                if not baro_consistent(cands[m[0]], hh):
-                    cands[m[0]].accepted = False
-                    cands[m[0]].reject_reason = "baro_inconsistent"
             if not m or not cands[m[0]].accepted:
                 miss += 1
                 rows.append(dict(scenario=scenario, session=k, h_true=j["h_max"], airtime_true=j["airtime"], detected=False,
@@ -48,8 +43,7 @@ def run(scenario, n_sessions, duration, seed0):
                              h_best=h.best, method=h.method, h_fit=h.h_fit, h_quad=h.h_quad, h_max_sample=h.h_max_sample,
                              h_airtime=h.h_airtime, n_baro=h.n_flight_samples,
                              dist_speed=d["dist_speed"], dist_pos=d["dist_pos"], v_to=d["v_to"]))
-        fp = [c for i, c in enumerate(cands) if i not in used and c.accepted
-              and baro_consistent(c, estimate_height(c.t_to, c.t_land, s.press_t, s.press, HeightParams()))]
+        fp = [c for i, c in enumerate(cands) if i not in used and c.accepted]
         fp_rows.append(dict(scenario=scenario, session=k, false_positives=len(fp), n_true=len(truth["jumps"]),
                             riding_min=duration / 60))
     return pd.DataFrame(rows), pd.DataFrame(fp_rows)

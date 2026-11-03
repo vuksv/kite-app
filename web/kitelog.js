@@ -168,11 +168,14 @@ export function buildStreams(records) {
 export const DEFAULT_DETECT = {
   lpTransientHz: 4.0, lpLevelHz: 1.0, hpSplitHz: 3.0, roughWinS: 0.32, roughRefWinS: 60,
   roughRatio: 0.30, roughFloorG: 0.035, levelMinG: 0.25, levelMaxG: 1.45, minSmoothS: 0.32, mergeGapS: 0.6,
-  takeoffSearchS: 1.2, takeoffMinPeakG: 1.35, landingSearchS: 0.9, landingMinPeakG: 1.6, landingRiseG: 0.5,
-  minSpeedMps: 3.0, minFlightSpeedMps: 2.5, minFlightSpeedRatio: 0.4, minValidFrac: 0.6, maxDataGapS: 1.5,
+  takeoffSearchS: 1.2, takeoffMinPeakG: 1.35, landingSearchS: 2.5, landingMinPeakG: 1.6, landingRiseG: 0.5,
+  minSpeedMps: 3.0, minFlightSpeedMps: 2.5, minFlightSpeedRatio: 0.3, minValidFrac: 0.6, maxDataGapS: 1.5,
   maxAirtimeS: 14.0, takeoffPoint: 'peak',
   takeoffMinJerkG: 0.0, landingMinJerkG: 0.0,   // optional "large quick change" gates (g per 40 ms sample); 0 = off
   minRoughRefG: 0.05,                            // no chop vibration around the candidate = not riding -> no evidence
+  bridgeRoughRatio: 1.0,
+  maxLevelWithoutPopG: 0.95, popPeakG: 2.0,      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
+  baroGate: false,                               // barometer veto off: the port gets wet on the water (see docs/ANALYSIS.md)
 };
 
 export function computeFeatures(s, p = DEFAULT_DETECT) {
@@ -235,7 +238,15 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
       const mid = 0.5 * (pkTo + flightLevel); let j = iPk; while (j < b && F.m4[j] > mid) j++; tTo = F.t[j];
     } else tTo = F.t[iPk];
     const b1 = Math.min(n, b + Math.round(p.landingSearchS * FS));
-    let iLp = b, m = -Infinity; for (let i = b; i < b1; i++) if (F.m4[i] > m) { m = F.m4[i]; iLp = i; }
+    let iLp = b, m = -Infinity;
+    let i0 = -1; for (let i = b; i < b1; i++) if (F.m4[i] >= p.landingMinPeakG) { i0 = i; break; }
+    if (i0 >= 0) {                                   // first impact after the smooth stretch, not the biggest in the window
+      const e = Math.min(b1, i0 + Math.round(0.4 * FS)); iLp = i0; m = -Infinity; for (let i = i0; i < e; i++) if (F.m4[i] > m) { m = F.m4[i]; iLp = i; }
+      if (i0 - b > Math.round(0.5 * FS)) {
+        const br = Array.from(F.rough.subarray(b, i0)).map(v => Number.isFinite(v) ? v : NaN);
+        if (median(br) > p.bridgeRoughRatio * median(F.roughRef.subarray(b, i0))) { const e2 = b + Math.round(0.5 * FS); iLp = b; m = -Infinity; for (let i = b; i < e2; i++) if (F.m4[i] > m) { m = F.m4[i]; iLp = i; } }
+      }
+    } else { for (let i = b; i < b1; i++) if (F.m4[i] > m) { m = F.m4[i]; iLp = i; } }
     let pkLand = F.m4[iLp], landingInGap = false, k;
     const invalidAfter = []; for (let i = b; i < b1; i++) if (!s.valid[i]) invalidAfter.push(i);
     if (pkLand < p.landingMinPeakG && invalidAfter.length) { landingInGap = true; k = invalidAfter[0]; pkLand = NaN; }
@@ -245,13 +256,14 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
       k = Math.min(k + 1, iRaw);
     }
     const tLand = F.t[k], airtime = tLand - tTo;
-    const spd = Number.isFinite(F.speed[a]) ? F.speed[a] : NaN;
+    const spd = Number.isFinite(F.speed[a]) ? interp(tTo, F.t, F.speed) : NaN;      // speed at the take-off instant
     const spdMin = nanmin(F.speed.subarray(a, b));
     const reasons = [], flags = [];
     const jerkTo = nanmax(F.jerk.subarray(a0, a1)), jerkLand = b1 > b ? nanmax(F.jerk.subarray(b, b1)) : NaN;
     if (takeoffInGap) flags.push('takeoff_in_gap'); else if (pkTo < p.takeoffMinPeakG) reasons.push('no_takeoff_peak');
     if (landingInGap) flags.push('landing_in_gap'); else if (pkLand < p.landingMinPeakG) reasons.push('no_landing_peak');
     if (takeoffInGap && landingInGap) reasons.push('both_transients_in_gap');
+    if (flightLevel >= p.maxLevelWithoutPopG && !(pkTo >= p.popPeakG)) reasons.push('no_kite_support');
     if (p.minRoughRefG > 0 && median(F.roughRef.subarray(a, b)) < p.minRoughRefG) reasons.push('no_vibration_context');
     if (p.takeoffMinJerkG > 0 && !takeoffInGap && jerkTo < p.takeoffMinJerkG) reasons.push('no_takeoff_jerk');
     if (p.landingMinJerkG > 0 && !landingInGap && jerkLand < p.landingMinJerkG) reasons.push('no_landing_jerk');
@@ -270,7 +282,7 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
 
 // ------------------------------------------------------------------ height
 export const DEFAULT_HEIGHT = { preWin: [-14, -1.5], postWin: [3, 16], tempC: 15, aEff: 3.2, lagRange: [-0.2, 1.2], aGrid: [1.0, 9.8, 36],
-  minFitSamples: 2, splashJumpPa: 60, fitRmseAbsM: 0.6, fitRmseRel: 0.12, quadRmseMaxM: 1.5 };
+  minFitSamples: 2, splashJumpPa: 60, splashStepPa: 40, fitRmseAbsM: 0.6, fitRmseRel: 0.12, quadRmseMaxM: 1.5 };
 
 export function heightFromAirtime(T, aEff = 3.2) { return aEff * T * T / 8; }
 export function ballisticHeight(T) { return G * T * T / 8; }
@@ -289,7 +301,7 @@ export function jumpModel(T, aUp, aDn) {
 export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) {
   const T = tLand - tTo;
   const r = { hMaxSample: NaN, hQuad: NaN, hFit: NaN, hAirtime: heightFromAirtime(T, prm.aEff), hBallistic: ballisticHeight(T), best: NaN, method: '',
-    nFlightSamples: 0, hFlightStd: NaN, fitRmseM: NaN, fitAUp: NaN, fitADn: NaN, fitLagS: NaN, baselinePrePa: NaN, baselinePostPa: NaN, baselineOk: false, baroOk: false, flag: '', samples: [] };
+    nFlightSamples: 0, hFlightStd: NaN, splashed: false, fitRmseM: NaN, fitAUp: NaN, fitADn: NaN, fitLagS: NaN, baselinePrePa: NaN, baselinePostPa: NaN, baselineOk: false, baroOk: false, flag: '', samples: [] };
   const pre = [], post = [];
   for (let i = 0; i < pressT.length; i++) {
     if (pressT[i] >= tTo + prm.preWin[0] && pressT[i] <= tTo + prm.preWin[1]) pre.push(press[i]);
@@ -301,6 +313,12 @@ export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) 
   if (Number.isNaN(pPre)) pPre = pPost;
   if (Number.isNaN(pPost)) pPost = pPre;
   r.baselineOk = Math.abs(pPre - pPost) < prm.splashJumpPa;
+  { // water on the port: step changes of tens-hundreds of Pa between consecutive samples anywhere around the jump
+    let last = null, maxStep = 0;
+    for (let i = 0; i < pressT.length; i++) if (pressT[i] >= tTo + prm.preWin[0] && pressT[i] <= tLand + prm.postWin[1] && Number.isFinite(press[i])) { if (last !== null) maxStep = Math.max(maxStep, Math.abs(press[i] - last)); last = press[i]; }
+    r.splashed = maxStep > prm.splashStepPa;
+    if (r.splashed) r.baselineOk = false;
+  }
   const tc0 = tTo + (prm.preWin[0] + prm.preWin[1]) / 2, tc1 = tLand + (prm.postWin[0] + prm.postWin[1]) / 2;
   const tt = [], hh = [];
   const rho = (0.5 * (pPre + pPost)) / (R_AIR * (prm.tempC + 273.15));
@@ -346,7 +364,7 @@ export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) 
   r.baroOk = r.baselineOk && fitOk && r.hFit <= 1.3 * r.hBallistic + 0.5;
   if (r.baroOk) { r.best = r.hFit; r.method = 'baro_fit'; }
   else if (r.baselineOk && Number.isFinite(r.hQuad) && r.hQuad <= 1.3 * r.hBallistic + 0.5) { r.best = r.hQuad; r.method = 'baro_quad'; r.flag = (Number.isFinite(r.fitRmseM) && r.fitRmseM < prm.quadRmseMaxM) ? 'fit_rejected' : 'baro_noisy'; }
-  else { r.best = r.hAirtime; r.method = 'airtime'; r.flag = 'baro_unreliable'; }
+  else { r.best = r.hAirtime; r.method = 'airtime'; r.flag = r.splashed ? 'baro_wet' : 'baro_unreliable'; }
   return r;
 }
 
@@ -415,7 +433,7 @@ export function analyze(records, detectParams = DEFAULT_DETECT, heightParams = D
     const h = estimateHeight(c.tTo, c.tLand, s.pressT, s.press, heightParams);
     const d = jumpDistance(s, c.tTo, c.tLand);
     let accepted = c.accepted, reason = c.rejectReason;
-    if (accepted && !baroConsistent(c, h)) { accepted = false; reason = 'baro_inconsistent'; }
+    if (detectParams.baroGate && accepted && !baroConsistent(c, h)) { accepted = false; reason = 'baro_inconsistent'; }
     return { jump: k + 1, accepted, rejectReason: reason, flags: c.flags, tTo: c.tTo, tLand: c.tLand, tsTo: c.tTo * s.tsSlope + s.tsOffset,
       airtime: c.airtime, height: h.best, heightMethod: h.method, heightFlag: h.flag, hFit: h.hFit, hQuad: h.hQuad, hMaxSample: h.hMaxSample,
       hAirtime: h.hAirtime, fitRmse: h.fitRmseM, fitAUp: h.fitAUp, fitADn: h.fitADn, fitLag: h.fitLagS, nBaro: h.nFlightSamples, baroSamples: h.samples,

@@ -38,7 +38,7 @@ for url in urls:
         s = build_streams(rec)
         cands, F = detect_jumps(s, DetectParams())
         heights = [estimate_height(c.t_to, c.t_land, s.press_t, s.press, HeightParams()) for c in cands]
-        jumps = jumps_table(s, cands, heights)
+        jumps = jumps_table(s, cands, heights, baro_gate=False)
         stats = session_stats(s, jumps)
         jumps.to_csv(os.path.join(d, "jumps.csv"), index=False)
         report.plot_session(s, F, jumps, os.path.join(d, "session.png"))

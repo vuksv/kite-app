@@ -30,6 +30,7 @@ class HeightParams:
     a_grid: tuple = (1.0, 9.8, 36)
     min_fit_samples: int = 2
     splash_jump_pa: float = 60.0       # baseline window outlier rejection (5 m)
+    splash_step_pa: float = 40.0       # max step between consecutive 1 Hz samples before the trace counts as wet
     fit_rmse_abs_m: float = 0.6        # fit accepted when rmse < max(abs, rel * h)
     fit_rmse_rel: float = 0.12
     quad_rmse_max_m: float = 1.5       # beyond this the trace is junk -> airtime model
@@ -53,6 +54,7 @@ class HeightResult:
     baseline_pre_pa: float = np.nan
     baseline_post_pa: float = np.nan
     baseline_ok: bool = False
+    splashed: bool = False
     baro_ok: bool = False
     flag: str = ""
 
@@ -84,6 +86,13 @@ def estimate_height(t_to: float, t_land: float, press_t: np.ndarray, press: np.n
     if np.isnan(p_post):
         p_post = p_pre
     r.baseline_ok = abs(p_pre - p_post) < prm.splash_jump_pa
+    # water on the pressure port shows as step changes of tens to hundreds of Pa between
+    # consecutive 1 Hz samples anywhere around the jump: the trace is then unusable
+    win = (press_t >= t_to + prm.pre_win[0]) & (press_t <= t_land + prm.post_win[1]) & np.isfinite(press)
+    pw = press[win]
+    r.splashed = bool(len(pw) >= 2 and np.max(np.abs(np.diff(pw))) > prm.splash_step_pa)
+    if r.splashed:
+        r.baseline_ok = False
     t_c0 = t_to + np.mean(prm.pre_win)
     t_c1 = t_land + np.mean(prm.post_win)
     sel = (press_t >= t_to - 0.6) & (press_t <= t_land + 0.6) & np.isfinite(press)
@@ -148,5 +157,5 @@ def estimate_height(t_to: float, t_land: float, press_t: np.ndarray, press: np.n
         # a healthy barometer that disagrees with the model is still the better witness
         r.best, r.method, r.flag = r.h_quad, "baro_quad", "fit_rejected" if np.isfinite(r.fit_rmse_m) and r.fit_rmse_m < prm.quad_rmse_max_m else "baro_noisy"
     else:
-        r.best, r.method, r.flag = r.h_airtime, "airtime", "baro_unreliable"
+        r.best, r.method, r.flag = r.h_airtime, "airtime", "baro_wet" if r.splashed else "baro_unreliable"
     return r
