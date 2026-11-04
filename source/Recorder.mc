@@ -35,6 +35,8 @@ class Recorder {
     var jumpCount = 0;
     var lastSaveOk = null;                // result of the last save, shown briefly by the view
     var lastSaveTime = 0;
+    var nAccFields = 0;                   // how many acc_* fields the firmware actually gave us (the 16-field limit "may vary")
+    var fieldError = null;                // non-null when the FIT fields could not all be created
 
     function initialize() {
     }
@@ -50,12 +52,25 @@ class Recorder {
                 :sport => Activity.SPORT_KITESURFING,
                 :subSport => Activity.SUB_SPORT_GENERIC
             });
-            for (var i = 0; i < N_ACC_FIELDS; i++) {
-                accFields[i] = session.createField("acc_" + i, i, Fit.DATA_TYPE_DOUBLE, {:mesgType => Fit.MESG_TYPE_RECORD});
+            // Create the three bookkeeping fields first (they make the file decodable), then as
+            // many sample fields as the firmware allows, and never dereference a field we did not get.
+            fieldError = null;
+            nAccFields = 0;
+            try {
+                tmrField = session.createField("tmr", 14, Fit.DATA_TYPE_UINT32, {:mesgType => Fit.MESG_TYPE_RECORD, :units => "ms"});
+                metaField = session.createField("meta", 15, Fit.DATA_TYPE_UINT32, {:mesgType => Fit.MESG_TYPE_RECORD});
+                pressField = session.createField("press", 13, Fit.DATA_TYPE_FLOAT, {:mesgType => Fit.MESG_TYPE_RECORD, :units => "Pa"});
+                for (var i = 0; i < N_ACC_FIELDS; i++) {
+                    var f = session.createField("acc_" + i, i, Fit.DATA_TYPE_DOUBLE, {:mesgType => Fit.MESG_TYPE_RECORD});
+                    if (f == null) { break; }
+                    accFields[i] = f;
+                    nAccFields = i + 1;
+                }
+            } catch (e) {
+                fieldError = e.getErrorMessage();
             }
-            pressField = session.createField("press", 13, Fit.DATA_TYPE_FLOAT, {:mesgType => Fit.MESG_TYPE_RECORD, :units => "Pa"});
-            tmrField = session.createField("tmr", 14, Fit.DATA_TYPE_UINT32, {:mesgType => Fit.MESG_TYPE_RECORD, :units => "ms"});
-            metaField = session.createField("meta", 15, Fit.DATA_TYPE_UINT32, {:mesgType => Fit.MESG_TYPE_RECORD});
+            if (tmrField == null || metaField == null) { fieldError = "FIT fields"; }
+            if (nAccFields < N_ACC_FIELDS && fieldError == null) { fieldError = "only " + nAccFields + " acc fields"; }
             if (ENABLE_LAP_FIELDS) {
                 lapAirField = session.createField("lap_air", 20, Fit.DATA_TYPE_FLOAT, {:mesgType => Fit.MESG_TYPE_LAP, :units => "s"});
                 lapHeightField = session.createField("lap_h", 21, Fit.DATA_TYPE_FLOAT, {:mesgType => Fit.MESG_TYPE_LAP, :units => "m"});
@@ -98,9 +113,9 @@ class Recorder {
     function onBatch(xs, ys, zs, pressurePa, gpsOk) {
         if (session == null || state != STATE_RECORDING) { return; }
         var n = xs.size();
-        if (n > 2 * N_ACC_FIELDS) { n = 2 * N_ACC_FIELDS; }
+        if (n > 2 * nAccFields) { n = 2 * nAccFields; }      // fewer fields than planned: keep the first samples of each batch
         var k = 0;
-        for (var f = 0; f < N_ACC_FIELDS; f++) {
+        for (var f = 0; f < nAccFields; f++) {
             var c0 = Pack.CODE_INVALID, c1 = Pack.CODE_INVALID, c2 = Pack.CODE_INVALID;
             var c3 = Pack.CODE_INVALID, c4 = Pack.CODE_INVALID, c5 = Pack.CODE_INVALID;
             if (k < n) {
@@ -113,13 +128,14 @@ class Recorder {
             k += 2;
         }
         var flags = 0;
-        if (pressurePa != null) {
+        if (pressurePa != null && pressField != null) {
             pressField.setData(pressurePa.toFloat());
             flags = flags | 0x1;
         }
         if (gpsOk) { flags = flags | 0x2; }
-        tmrField.setData(System.getTimer() & 0x7FFFFFFF);
-        metaField.setData(Pack.packMeta(seq, n, state, flags));
+        if (nAccFields < N_ACC_FIELDS) { flags = flags | 0x4; }
+        if (tmrField != null) { tmrField.setData(System.getTimer() & 0x7FFFFFFF); }
+        if (metaField != null) { metaField.setData(Pack.packMeta(seq, xs.size(), state, flags)); }
         seq = (seq + 1) & 0xFFFF;
         batches += 1;
     }

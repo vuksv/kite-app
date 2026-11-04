@@ -37,7 +37,10 @@ class KiteLogView extends WatchUi.View {
         if (timer != null) { timer.stop(); timer = null; }
     }
 
+    var accelDead = false;
+
     function onTick() as Void {
+        accelDead = app.hub.checkAccel();
         WatchUi.requestUpdate();
     }
 
@@ -101,6 +104,13 @@ class KiteLogView extends WatchUi.View {
             dc.drawText(w / 2, h - 46, Graphics.FONT_XTINY, WatchUi.loadResource(msg), Graphics.TEXT_JUSTIFY_CENTER);
         }
         var bottom;
+        if (accelDead || rec.fieldError != null) {
+            // a dead sensor stream or a FIT field problem must be impossible to miss before riding off
+            dc.fillRectangle(0, h - 46, w, 22);
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
+            dc.drawText(w / 2, h - 46, Graphics.FONT_TINY, accelDead ? "NO ACCEL - restart" : "FIT: " + rec.fieldError, Graphics.TEXT_JUSTIFY_CENTER);
+            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_WHITE);
+        }
         if (app.live != null) {
             bottom = "J " + app.live.jumps + "  " + app.live.lastAirtime.format("%.1f") + "s";
         } else {

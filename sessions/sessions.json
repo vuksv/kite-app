@@ -1,8 +1,6 @@
 [
- {
-  "file": "2026-11-03_brazil-1.fit",
-  "start_utc": "2026-11-03T00:18:40+00:00",
-  "records": 1896,
-  "label": "brazil 1"
- }
+ {"file": "2026-11-03_brazil-4.fit", "start_utc": "2026-11-03T18:45:38+00:00", "records": 2180, "label": "brazil 4"},
+ {"file": "2026-11-03_brazil-3-surfr.fit", "start_utc": "2026-11-03T15:50:06+00:00", "records": 4691, "label": "brazil 3", "note": "recorded with the Surfr app: GPS only"},
+ {"file": "2026-11-03_brazil-2-surfr.fit", "start_utc": "2026-11-03T15:01:11+00:00", "records": 2236, "label": "brazil 2", "note": "recorded with the Surfr app: GPS only"},
+ {"file": "2026-11-03_brazil-1.fit", "start_utc": "2026-11-03T00:18:40+00:00", "records": 1896, "label": "brazil 1"}
 ]

@@ -408,6 +408,29 @@ export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) 
   return r;
 }
 
+function sessionStatsFromSpeed(s, jumps) {
+  const ti = [], tv = [];
+  for (let i = 0; i < s.gpsT.length; i++) if (Number.isFinite(s.speed[i])) { ti.push(s.gpsT[i]); tv.push(s.speed[i]); }
+  let dist = 0, riding = 0, vmax = 0;
+  for (let i = 0; i < ti.length; i++) { const dt = Math.min(5, i ? ti[i] - ti[i - 1] : 1); dist += tv[i] * dt; if (tv[i] >= 3) riding += dt; vmax = Math.max(vmax, tv[i]); }
+  let v10 = 0; for (let i = 0; i + 10 <= tv.length; i++) { let a = 0; for (let k = 0; k < 10; k++) a += tv[i + k]; v10 = Math.max(v10, a / 10); }
+  const ridingSpeeds = tv.filter(v => v >= 3), acc = jumps.filter(j => j.accepted);
+  return {
+    durationS: s.t.length ? s.t[s.t.length - 1] - s.t[0] : 0, ridingTimeS: riding, distanceM: dist, maxSpeedMps: vmax, maxSpeed10sMps: v10,
+    avgRidingSpeedMps: ridingSpeeds.length ? ridingSpeeds.reduce((a, b) => a + b, 0) / ridingSpeeds.length : NaN,
+    tacks: countTacks(s), jumps: acc.length,
+    maxHeightM: acc.length ? Math.max(...acc.map(j => j.height)) : 0, maxAirtimeS: acc.length ? Math.max(...acc.map(j => j.airtime)) : 0,
+    totalAirtimeS: acc.reduce((a, j) => a + j.airtime, 0), longestJumpM: acc.length ? Math.max(...acc.map(j => j.distance)) : 0,
+    nBatches: s.nBatches, nDupBatches: s.nDup, nGaps: s.nGap, baroValidFrac: s.baroValidFrac, gpsFixFrac: s.gpsFixFrac, gpsOnly: !!s.gpsOnly,
+  };
+}
+
+export function analyzeGpsOnly(records) {
+  const s = buildGpsStreams(records);
+  const F = { t: s.gpsT, mag: new Float64Array(0), magF: new Float64Array(0), m4: new Float64Array(0), m1: new Float64Array(0), rough: new Float64Array(0), roughRef: new Float64Array(0), speed: s.speed, jerk: new Float64Array(0) };
+  return { streams: s, features: F, jumps: [], stats: sessionStatsFromSpeed(s, []), gpsOnly: true };
+}
+
 // ------------------------------------------------------------------ session
 export function localXY(lat, lon, lat0, lon0) {
   const kx = 111132 * Math.cos(lat0 * Math.PI / 180), ky = 111132;
@@ -466,7 +489,23 @@ export function countTacks(s, minSpeed = 3.0, turnDeg = 100, windowS = 15) {
   return tacks;
 }
 
+export function hasAccel(records) { return records.some(r => r.dev && r.dev.acc_0 != null && r.dev.tmr != null); }
+
+/** GPS-only streams for a recording without KiteLog samples (e.g. recorded with another app). */
+export function buildGpsStreams(records) {
+  const recs = records.filter(r => r.ts != null);
+  const t = Float64Array.from(recs.map(r => r.ts));
+  return {
+    t, fx: new Float64Array(0), fy: new Float64Array(0), fz: new Float64Array(0), valid: new Uint8Array(0),
+    pressT: t, press: Float64Array.from(recs.map(r => (r.dev && r.dev.press != null) ? r.dev.press : NaN)),
+    gpsT: t, lat: Float64Array.from(recs.map(r => r.lat != null ? r.lat : NaN)), lon: Float64Array.from(recs.map(r => r.lon != null ? r.lon : NaN)),
+    speed: Float64Array.from(recs.map(r => r.speed != null ? r.speed : NaN)),
+    tsOffset: 0, tsSlope: 1, sampleDt: NaN, nDup: 0, nGap: 0, nBatches: 0, baroValidFrac: 0, gpsFixFrac: recs.filter(r => r.lat != null).length / Math.max(1, recs.length), gpsOnly: true,
+  };
+}
+
 export function analyze(records, detectParams = DEFAULT_DETECT, heightParams = DEFAULT_HEIGHT) {
+  if (!hasAccel(records)) return analyzeGpsOnly(records);
   const s = buildStreams(records);
   const { cands, F } = detectJumps(s, detectParams);
   const jumps = cands.map((c, k) => {
@@ -481,21 +520,6 @@ export function analyze(records, detectParams = DEFAULT_DETECT, heightParams = D
       takeoffSpeed: d.vTo, landingSpeed: d.vLand, maxAirSpeed: d.vMaxAir,
       takeoffPeakG: c.takeoffPeakG, landingPeakG: c.landingPeakG, takeoffJerkG: c.takeoffJerkG, landingJerkG: c.landingJerkG, flightLevelG: c.flightLevelG, roughIn: c.roughIn, roughRef: c.roughRef, cand: c, h };
   });
-  // session stats
-  const ti = [], tv = [];
-  for (let i = 0; i < s.gpsT.length; i++) if (Number.isFinite(s.speed[i])) { ti.push(s.gpsT[i]); tv.push(s.speed[i]); }
-  let dist = 0, riding = 0, vmax = 0;
-  for (let i = 0; i < ti.length; i++) { const dt = Math.min(5, i ? ti[i] - ti[i - 1] : 1); dist += tv[i] * dt; if (tv[i] >= 3) riding += dt; vmax = Math.max(vmax, tv[i]); }
-  let v10 = 0; for (let i = 0; i + 10 <= tv.length; i++) { let a = 0; for (let k = 0; k < 10; k++) a += tv[i + k]; v10 = Math.max(v10, a / 10); }
-  const ridingSpeeds = tv.filter(v => v >= 3);
-  const acc = jumps.filter(j => j.accepted);
-  const stats = {
-    durationS: s.t[s.t.length - 1] - s.t[0], ridingTimeS: riding, distanceM: dist, maxSpeedMps: vmax, maxSpeed10sMps: v10,
-    avgRidingSpeedMps: ridingSpeeds.length ? ridingSpeeds.reduce((a, b) => a + b, 0) / ridingSpeeds.length : NaN,
-    tacks: countTacks(s), jumps: acc.length,
-    maxHeightM: acc.length ? Math.max(...acc.map(j => j.height)) : 0, maxAirtimeS: acc.length ? Math.max(...acc.map(j => j.airtime)) : 0,
-    totalAirtimeS: acc.reduce((a, j) => a + j.airtime, 0), longestJumpM: acc.length ? Math.max(...acc.map(j => j.distance)) : 0,
-    nBatches: s.nBatches, nDupBatches: s.nDup, nGaps: s.nGap, baroValidFrac: s.baroValidFrac, gpsFixFrac: s.gpsFixFrac,
-  };
+  const stats = sessionStatsFromSpeed(s, jumps);
   return { streams: s, features: F, jumps, stats };
 }

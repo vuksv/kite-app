@@ -15,6 +15,9 @@ class SensorHub {
     var batchCount = 0;
     var lastBatchSize = 0;
     var sampleRate = 25;
+    var lastBatchTimer = 0;         // System.getTimer() at the last accelerometer callback
+    var restarts = 0;               // how often the listener had to be re-registered
+    var listenerError = null;
 
     function initialize(rec, liveDetector) {
         recorder = rec;
@@ -65,11 +68,29 @@ class SensorHub {
             :period => 1,                               // one callback per second
             :accelerometer => {:enabled => true, :sampleRate => sampleRate}
         };
+        listenerError = null;
         try {
             Sensor.registerSensorDataListener(method(:onSensorData), options);
         } catch (e) {
-            System.println("accel listener failed: " + e.getErrorMessage());
+            listenerError = e.getErrorMessage();
+            System.println("accel listener failed: " + listenerError);
         }
+        lastBatchTimer = System.getTimer();
+    }
+
+    // Called once a second by the view.  True when the accelerometer stream is silent
+    // (no batch for 4 s).  Re-registers the listener after 10 s of silence (up to 6 times);
+    // the screen shows "NO ACCEL" meanwhile.
+    function checkAccel() {
+        var since = System.getTimer() - lastBatchTimer;
+        if (since < 4000) { return false; }
+        if (since > 10000 * (restarts + 1) && restarts < 6) {
+            restarts += 1;
+            Sensor.unregisterSensorDataListener();
+            enableAccel();
+            lastBatchTimer = System.getTimer() - 4000;
+        }
+        return true;
     }
 
     function onPosition(info as Position.Info) as Void {
@@ -85,6 +106,7 @@ class SensorHub {
         var zs = ad.z;
         lastBatchSize = xs.size();
         batchCount += 1;
+        lastBatchTimer = System.getTimer();
         // read the barometer on the same cadence so the two share one clock
         var ai = Activity.getActivityInfo();
         pressurePa = (ai != null) ? ai.rawAmbientPressure : null;

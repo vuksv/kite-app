@@ -135,12 +135,17 @@ function render() {
   const sport = state.fit.sessions[0] && state.fit.sessions[0].sport === 44 ? 'Kiteboarding' : 'Activity';
   $('subtitle').textContent = `${sport} · ${hms(stats.durationS)} recorded · riding ${hms(stats.ridingTimeS)} · ${state.fit.records.length} records`;
   const pill = (txt, cls = '') => `<span class="pill ${cls}">${esc(txt)}</span>`;
+  if (stats.gpsOnly) {
+    $('health').innerHTML = pill('No KiteLog accelerometer data in this file (recorded with another app, or the sensor stream never started): GPS only, no jumps', 'bad') +
+      pill(`GPS fix ${Math.round(stats.gpsFixFrac * 100)} %`);
+  } else {
   const gapCls = stats.nGaps > stats.nBatches * 0.01 ? 'warn' : '';
   const dtMs = (state.result.streams.sampleDt * 1000).toFixed(1);
   $('health').innerHTML = pill(`${stats.nBatches} accel batches`) + pill(`${stats.nDupBatches} duplicated`, stats.nDupBatches > 5 ? 'warn' : '') +
     pill(`${stats.nGaps} gaps`, gapCls) + pill(`baro ${Math.round(stats.baroValidFrac * 100)} %`, stats.baroValidFrac < 0.95 ? 'warn' : '') +
     pill(`GPS fix ${Math.round(stats.gpsFixFrac * 100)} %`, stats.gpsFixFrac < 0.9 ? 'warn' : '') + pill(`${dtMs} ms/sample`) +
     (state.fit.errors.length ? pill('decoder: ' + state.fit.errors[0], 'bad') : '');
+  }
   const tiles = [
     ['Jumps', stats.jumps, ''], ['Max height', fmt(stats.maxHeightM, 1), 'm'], ['Max airtime', fmt(stats.maxAirtimeS, 2), 's'],
     ['Longest jump', fmt(stats.longestJumpM, 0), 'm'], ['Max speed', fmt(stats.maxSpeedMps * k, 1), u], ['Max 10 s speed', fmt(stats.maxSpeed10sMps * k, 1), u],
@@ -240,6 +245,7 @@ function renderTrack() {
 
 function renderTimeline() {
   const { streams: s, jumps } = state.result;
+  if (!s.t.length) { $('timeline').innerHTML = ''; return; }
   const [k, u] = speedUnit();
   const t0 = s.t[0];
   const x = [], y = [];
@@ -360,7 +366,7 @@ async function listRecorded() {
     const list = await r.json(); if (!list.length) return;
     const el = $('recorded'); el.classList.remove('hidden');
     el.innerHTML = '<h2 style="margin-top:0">Recorded sessions</h2><div class="row">' + list.map(e =>
-      `<a class="btn" href="?fit=sessions/${encodeURIComponent(e.file)}">${esc(e.start_utc.slice(0, 10))} · ${esc(e.label)}</a>`).join('') + '</div>';
+      `<a class="btn" href="?fit=sessions/${encodeURIComponent(e.file)}">${esc(e.start_utc.slice(0, 10))} · ${esc(e.label)}${e.note ? ' <span class="pill warn">' + esc(e.note) + '</span>' : ''}</a>`).join('') + '</div>';
   } catch (e) { /* no list on this host */ }
 }
 
