@@ -4,6 +4,7 @@
   --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
   --good: #008300; --bad: #e34948;
+  --top: #eda100; --on-top: #0b0b0b;
   --radius: 10px; --gap: 12px;
 }
 @media (prefers-color-scheme: dark) {
@@ -12,6 +13,7 @@
     --surface: #1a1a19; --surface-2: #242423; --border: #3a3a38;
     --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e88;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+    --top: #f2b632; --on-top: #0b0b0b;
   }
 }
 :root[data-theme="dark"] {
@@ -19,6 +21,7 @@
   --surface: #1a1a19; --surface-2: #242423; --border: #3a3a38;
   --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e88;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+  --top: #f2b632; --on-top: #0b0b0b;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--surface); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -66,3 +69,9 @@ details > summary { cursor: pointer; color: var(--text-2); font-weight: 600; }
 .hidden { display: none !important; }
 footer { margin: 30px 0 10px; font-size: 12px; color: var(--muted); }
 @media print { .noprint { display: none !important; } .card { break-inside: avoid; } body { font-size: 12px; } }
+
+/* top-3 jumps (by height): gold with the rank number, same on the track, the map and the table */
+.rank { display: inline-block; min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px; padding: 0 5px; margin-left: 4px;
+  background: var(--top); color: var(--on-top); font-size: 11px; font-weight: 700; text-align: center; vertical-align: 1px; }
+.rankpin { width: 24px; height: 24px; border-radius: 12px; background: #eda100; color: #0b0b0b; border: 2px solid #0b0b0b;
+  font: 700 13px/20px system-ui, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.4); }

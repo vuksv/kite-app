@@ -160,6 +160,12 @@ function render() {
   $('report').classList.remove('hidden');
 }
 
+// rank 1..3 of the highest accepted jumps, keyed by jump number
+function topRanks(n = 3) {
+  const acc = state.result.jumps.filter(j => j.accepted && Number.isFinite(j.height)).sort((a, b) => b.height - a.height).slice(0, n);
+  return new Map(acc.map((j, i) => [j.jump, i + 1]));
+}
+
 function renderTable() {
   const { jumps } = state.result;
   const [k, u] = speedUnit();
@@ -167,8 +173,9 @@ function renderTable() {
   const cols = [['jump', '#'], ['tsTo', 'Time'], ['height', 'Height (m)'], ['airtime', 'Airtime (s)'], ['distance', 'Length (m)'], ['takeoffSpeed', `Take-off (${u})`], ['heightMethod', 'Method']];
   $('jumps').querySelector('thead').innerHTML = '<tr>' + cols.map(([key, label]) => `<th data-key="${key}">${label}${state.sortKey === key ? (state.sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr>';
   const sorted = [...show].sort((a, b) => { const x = a[state.sortKey], y = b[state.sortKey]; return (typeof x === 'string' ? x.localeCompare(y) : (x - y)) * state.sortDir; });
+  const ranks = topRanks();
   $('jumps').querySelector('tbody').innerHTML = sorted.map(j => `<tr class="jump ${j.accepted ? '' : 'rej'}" data-jump="${j.jump}">
-      <td>${j.jump}${j.accepted ? '' : ' ✕'}</td><td>${clock(j.tsTo)}</td><td><b>${fmt(j.height, 1)}</b></td><td>${fmt(j.airtime, 2)}</td><td>${fmt(j.distance, 0)}</td><td>${fmt(j.takeoffSpeed * k, 1)}</td>
+      <td>${j.jump}${j.accepted ? '' : ' ✕'}${ranks.has(j.jump) ? `<span class="rank" title="top ${ranks.get(j.jump)} by height">${ranks.get(j.jump)}</span>` : ''}</td><td>${clock(j.tsTo)}</td><td><b>${fmt(j.height, 1)}</b></td><td>${fmt(j.airtime, 2)}</td><td>${fmt(j.distance, 0)}</td><td>${fmt(j.takeoffSpeed * k, 1)}</td>
       <td>${esc(j.heightMethod)}${j.flags ? ' <span class="pill warn">' + esc(j.flags) + '</span>' : ''}${j.accepted ? '' : ' <span class="pill bad">' + esc(j.rejectReason) + '</span>'}</td></tr>`).join('');
   $('jumps').querySelectorAll('th').forEach(th => th.onclick = () => { const key = th.dataset.key; state.sortDir = state.sortKey === key ? -state.sortDir : (key === 'jump' || key === 'tsTo' ? 1 : -1); state.sortKey = key; renderTable(); });
   $('jumps').querySelectorAll('tr.jump').forEach(tr => tr.onclick = () => toggleDetail(tr));
@@ -234,13 +241,21 @@ function renderTrack() {
   tr.xy.forEach((p, i) => { d += (i ? 'L' : 'M') + px(p[0]).toFixed(1) + ' ' + py(p[1]).toFixed(1); });
   let svg = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="GPS track with jumps"><path d="${d}" fill="none" stroke="var(--s1)" stroke-width="1.4" stroke-linejoin="round"/>`;
   const tt = tr.pts.map(p => p[0]);
-  for (const j of jumps.filter(j => j.accepted)) {
+  const ranks = topRanks();
+  const acc = jumps.filter(j => j.accepted);
+  for (const j of acc.filter(j => !ranks.has(j.jump))) {
     const x = interp(j.tTo, tt, xs), y = interp(j.tTo, tt, ys);
     svg += `<circle cx="${px(x).toFixed(1)}" cy="${py(y).toFixed(1)}" r="${(3 + Math.sqrt(Math.max(0, j.height)) * 1.6).toFixed(1)}" fill="var(--s2)" fill-opacity="0.75" stroke="var(--surface-2)" stroke-width="1"><title>Jump ${j.jump}: ${fmt(j.height)} m, ${fmt(j.airtime, 2)} s</title></circle>`;
   }
+  // top 3 last so they sit on top: gold disc with the rank number
+  for (const j of acc.filter(j => ranks.has(j.jump)).sort((a, b) => ranks.get(b.jump) - ranks.get(a.jump))) {
+    const x = px(interp(j.tTo, tt, xs)), y = py(interp(j.tTo, tt, ys)), r = ranks.get(j.jump);
+    svg += `<g><title>Top ${r} - jump ${j.jump}: ${fmt(j.height)} m, ${fmt(j.airtime, 2)} s</title><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="8.5" fill="var(--top)" stroke="var(--text)" stroke-width="1.5"/>` +
+      `<text x="${x.toFixed(1)}" y="${(y + 3.8).toFixed(1)}" text-anchor="middle" style="fill:var(--on-top);font-weight:700;font-size:11px">${r}</text></g>`;
+  }
   const bar = [5000, 2000, 1000, 500, 200, 100, 50, 20, 10].find(b => b <= span / 4) || 10;
   svg += `<line x1="12" x2="${(12 + bar * scale).toFixed(1)}" y1="${H - 10}" y2="${H - 10}" stroke="var(--text-2)" stroke-width="2"/><text x="12" y="${H - 14}">${bar} m</text></svg>`;
-  $('track').innerHTML = legend([['var(--s1)', 'track'], ['var(--s2)', 'jumps (size = height)']]) + svg;
+  $('track').innerHTML = legend([['var(--s1)', 'track'], ['var(--s2)', 'jumps (size = height)'], ['var(--top)', 'top 3 by height (numbered)']]) + svg;
 }
 
 function renderTimeline() {
@@ -277,9 +292,16 @@ async function showMap() {
   const line = L.polyline(tr.pts.map(p => [p[1], p[2]]), { color: '#2a78d6', weight: 2 }).addTo(map);
   map.fitBounds(line.getBounds());
   const tt = tr.pts.map(p => p[0]), la = tr.pts.map(p => p[1]), lo = tr.pts.map(p => p[2]);
+  const ranks = topRanks();
+  const popup = (j) => `<b>${ranks.has(j.jump) ? 'Top ' + ranks.get(j.jump) + ' · ' : ''}Jump ${j.jump}</b> · ${clock(j.tsTo)}<br>height ${fmt(j.height)} m<br>airtime ${fmt(j.airtime, 2)} s<br>length ${fmt(j.distance, 0)} m`;
   for (const j of state.result.jumps.filter(j => j.accepted)) {
-    L.circleMarker([interp(j.tTo, tt, la), interp(j.tTo, tt, lo)], { radius: 4 + Math.sqrt(Math.max(0, j.height)) * 2, color: '#eb6834', fillColor: '#eb6834', fillOpacity: 0.6, weight: 1 })
-      .bindPopup(`<b>Jump ${j.jump}</b><br>height ${fmt(j.height)} m<br>airtime ${fmt(j.airtime, 2)} s<br>length ${fmt(j.distance, 0)} m`).addTo(map);
+    const ll = [interp(j.tTo, tt, la), interp(j.tTo, tt, lo)];
+    if (ranks.has(j.jump)) {
+      L.marker(ll, { icon: L.divIcon({ className: '', html: `<div class="rankpin">${ranks.get(j.jump)}</div>`, iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }),
+        zIndexOffset: 1000 - ranks.get(j.jump), title: `Top ${ranks.get(j.jump)}: ${fmt(j.height)} m` }).bindPopup(popup(j)).addTo(map);
+    } else {
+      L.circleMarker(ll, { radius: 4 + Math.sqrt(Math.max(0, j.height)) * 2, color: '#eb6834', fillColor: '#eb6834', fillOpacity: 0.6, weight: 1 }).bindPopup(popup(j)).addTo(map);
+    }
   }
 }
 
