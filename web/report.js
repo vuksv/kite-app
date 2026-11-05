@@ -22,7 +22,7 @@ function readParams() {
   d.baroGate = $('baroGate').checked;
   const vMin = parseFloat($('minSpeedKmh').value);        // entered in km/h, detector works in m/s
   if (Number.isFinite(vMin)) d.minSpeedMps = vMin / KMH;
-  const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || 2.5 };
+  const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || 2.0 };
   return { d, h };
 }
 function applyDefaults() {

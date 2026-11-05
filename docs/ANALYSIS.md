@@ -110,6 +110,19 @@ Keep the FIT files: every tuning change can be replayed over all sessions with
   the wrist is not still in the air. That pair signature is now the second candidate
   generator (`pair_*` settings); jumped transitions nearly stop, so no speed-collapse gate
   for them. `a_eff` lowered to 2.5 m/s² to match the reported heights (rough calibration).
+* **Session 5 (Nov 4) – calibration against the Surfr phone app.** Surfr (phone in a pouch,
+  100 Hz IMU + barometer) logged 54 jumps over 2 h 17 min; its list is in
+  `sessions/2026-11-04_brazil-5_surfr.csv`. Aligned in time (Surfr started 548.5 s before the
+  watch; Surfr stamps a jump ~2 s after the pop), the wrist shows a pop → impact pair for 22 of
+  the 27 jumps with exact times. Those flights read **0.9–1.2 g** on the wrist (session 1:
+  0.83–0.96 g), with small bumps up to 2.3 g in the air, so the pair rules were widened:
+  pop ≥ 2.2 g, impact = first peak ≥ 2.5 g, level ≤ 1.15 g, in-air bumps < 2.4 g, roughness
+  ≤ 1.45× riding, ≥ 15 km/h at the pop. Result: 20/27 found with 3 extras (one where Surfr's
+  unlisted jump 17 is), 50 jumps for the session vs Surfr's 54, heights correlate 0.85 with
+  Surfr. Pop-to-landing airtime is ~0.9 s shorter than Surfr's airtime. `a_eff` = 2.0 m/s²
+  puts KiteLog 0.5 m below Surfr on average; 2.2 would match Surfr exactly, but the
+  independent study found Surfr overestimates by about that much, so 2.0 stays the default.
+  `tools/tests/test_real_sessions.py` locks these numbers in.
 * The barometer is useless on the water as worn: steps of hundreds of Pa (water on the
   port) and no visible rise even on that clean jump. Heights therefore come from the airtime
   model (`a_eff`, to be calibrated against video/WOO); the barometer veto is off by default.

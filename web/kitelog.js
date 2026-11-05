@@ -175,7 +175,8 @@ export const DEFAULT_DETECT = {
   minRoughRefG: 0.05,                            // no chop vibration around the candidate = not riding -> no evidence
   bridgeRoughRatio: 1.0,
   maxLevelWithoutPopG: 0.95, popPeakG: 2.0,
-  pairPopG: 2.5, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 8.0, pairMidMaxPeakG: 2.0, pairMidMaxLevelG: 1.0, pairMidMaxRoughRatio: 1.2,   // impulse-pair generator      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
+  // impulse-pair generator, re-tuned on session 5 against 27 Surfr-phone jumps (see tools/kitelog/detect.py)
+  pairPopG: 2.2, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 7.0, pairMidMaxPeakG: 2.4, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 1.45, pairMinSpeedMps: 4.2,      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
   baroGate: false,                               // barometer veto off: the port gets wet on the water (see docs/ANALYSIS.md)
 };
 
@@ -289,42 +290,49 @@ function peaks(x, h, dist) {
   return out;
 }
 
-// Pop -> impact pairs with a quiet middle (first real session: pops 2.6-3.8 g, impacts 3.2-5.9 g,
-// 2.7-4.1 s apart, middle 0.83-0.96 g, nothing above 2 g).  No speed-collapse gate: jumped transitions nearly stop.
+// Pop -> impact pairs with a quiet-ish middle.  The impact is the FIRST peak >= pairImpactG after
+// pairMinS; smaller bumps in between are allowed up to pairMidMaxPeakG.  No speed-collapse gate
+// (jumped transitions nearly stop); the speed at the pop must show the rider was planing.
 function impulsePairs(s, F, p, existing) {
-  const n = F.t.length, pk = peaks(F.m4, p.pairPopG, 8), out = [];
-  for (const a of pk) {
-    const lo = a + Math.round(p.pairMinS * FS), hi = Math.min(n, a + Math.round(p.pairMaxS * FS));
-    const b = pk.find(q => q >= lo && q < hi);
-    if (b === undefined || F.m4[b] < p.pairImpactG) continue;
-    const i0 = a + Math.round(0.3 * FS), i1 = b - Math.round(0.2 * FS);
-    if (i1 - i0 < Math.round(0.4 * FS)) continue;
+  const n = F.t.length, pk = peaks(F.m4, Math.min(p.pairPopG, p.pairImpactG), 6), out = [];
+  const pops = pk.filter(a => F.m4[a] >= p.pairPopG), impacts = pk.filter(b => F.m4[b] >= p.pairImpactG);
+  let takenUntil = -Infinity;
+  for (const a of pops) {
+    if (F.t[a] < takenUntil) continue;
+    const lo = a + Math.trunc(p.pairMinS * FS), hi = Math.min(n, a + Math.trunc(p.pairMaxS * FS));
+    const b = impacts.find(q => q >= lo && q < hi);
+    if (b === undefined) continue;
+    const i0 = a + Math.trunc(0.3 * FS), i1 = b - Math.trunc(0.25 * FS);
+    if (i1 - i0 < Math.trunc(0.4 * FS)) continue;
     const midRough = median(Array.from(F.rough.subarray(i0, i1)).map(v => Number.isFinite(v) ? v : NaN));
     const ref = median(F.roughRef.subarray(i0, i1)), level = median(F.m1.subarray(i0, i1));
     if (nanmax(F.m4.subarray(i0, i1)) >= p.pairMidMaxPeakG || level > p.pairMidMaxLevelG || midRough > p.pairMidMaxRoughRatio * ref) continue;
     let vf = 0; for (let i = a; i < b; i++) vf += s.valid[i]; if (vf / (b - a) < p.minValidFrac) continue;
     const tTo = F.t[a];
-    let iRaw = b, mm = -Infinity; for (let i = Math.max(0, b - Math.round(0.3 * FS)); i < Math.min(n, b + Math.round(0.3 * FS)); i++) if (F.magF[i] > mm) { mm = F.magF[i]; iRaw = i; }
+    const j0 = Math.max(a + 1, b - Math.trunc(0.3 * FS)), j1 = Math.min(n, b + Math.trunc(0.3 * FS));
+    let iRaw = j0, mm = -Infinity; for (let i = j0; i < j1; i++) if (F.magF[i] > mm) { mm = F.magF[i]; iRaw = i; }
     let k = iRaw; while (k > a && F.magF[k] > level + p.landingRiseG) k--; k = Math.min(k + 1, iRaw);
     const tLand = F.t[k], airtime = tLand - tTo;
     if (existing.some(c => c.accepted && c.tTo < tLand && c.tLand > tTo)) continue;
     const spd = interp(tTo, F.t, F.speed);
     const reasons = [];
-    if (Number.isFinite(spd) && spd < p.minSpeedMps) reasons.push('slow');
+    if (Number.isFinite(spd) && spd < Math.max(p.minSpeedMps, p.pairMinSpeedMps)) reasons.push('slow');
     if (airtime <= 0.3 || airtime > p.maxAirtimeS) reasons.push('airtime_range');
     if (p.minRoughRefG > 0 && ref < p.minRoughRefG) reasons.push('no_vibration_context');
-    out.push({ tSmoothStart: F.t[i0], tSmoothEnd: F.t[i1], tTo, tLand, airtime, takeoffPeakG: F.m4[a], landingPeakG: F.m4[b], flightLevelG: level,
+    const c = { tSmoothStart: F.t[i0], tSmoothEnd: F.t[i1], tTo, tLand, airtime, takeoffPeakG: F.m4[a], landingPeakG: F.m4[b], flightLevelG: level,
       roughIn: midRough, roughRef: ref, speedTo: spd, takeoffJerkG: nanmax(F.jerk.subarray(Math.max(0, a - 5), a + 5)), landingJerkG: nanmax(F.jerk.subarray(Math.max(0, b - 5), b + 5)),
-      accepted: reasons.length === 0, rejectReason: reasons.join(','), flags: 'impulse_pair', source: 'pair' });
+      accepted: reasons.length === 0, rejectReason: reasons.join(','), flags: 'impulse_pair', source: 'pair' };
+    out.push(c);
+    if (c.accepted) takenUntil = tLand + 0.5;
   }
   return out;
 }
 
 // ------------------------------------------------------------------ height
-export const DEFAULT_HEIGHT = { preWin: [-14, -1.5], postWin: [3, 16], tempC: 15, aEff: 2.5, lagRange: [-0.2, 1.2], aGrid: [1.0, 9.8, 36],
+export const DEFAULT_HEIGHT = { preWin: [-14, -1.5], postWin: [3, 16], tempC: 15, aEff: 2.0, lagRange: [-0.2, 1.2], aGrid: [1.0, 9.8, 36],
   minFitSamples: 2, splashJumpPa: 60, splashStepPa: 40, fitRmseAbsM: 0.6, fitRmseRel: 0.12, quadRmseMaxM: 1.5 };
 
-export function heightFromAirtime(T, aEff = 2.5) { return aEff * T * T / 8; }
+export function heightFromAirtime(T, aEff = 2.0) { return aEff * T * T / 8; }
 export function ballisticHeight(T) { return G * T * T / 8; }
 function robustLevel(p) {
   p = p.filter(Number.isFinite);

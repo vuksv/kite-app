@@ -25,7 +25,7 @@ class HeightParams:
     pre_win: tuple = (-14.0, -1.5)     # seconds relative to t_to for the baseline window
     post_win: tuple = (3.0, 16.0)      # seconds relative to t_land
     temp_c: float = 15.0
-    a_eff: float = 2.5                 # first real session: 2.7-4.1 s airtimes felt like <= 4-5 m -> ~2.5 m/s^2
+    a_eff: float = 2.0                 # fitted on 22 jumps vs the Surfr phone app (session 5): MAE 0.63 m
     lag_range: tuple = (-0.2, 1.2)     # unknown latency of the 1 Hz pressure read (s)
     a_grid: tuple = (1.0, 9.8, 36)
     min_fit_samples: int = 2

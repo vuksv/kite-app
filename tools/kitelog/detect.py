@@ -66,13 +66,17 @@ class DetectParams:
     # Second candidate generator, "impulse pair": a pop and an impact bracketing a quiet-ish
     # middle.  Measured on the first real session: pops 2.6-3.8 g, impacts 3.2-5.9 g,
     # 2.7-4.1 s apart, middle level 0.83-0.96 g with nothing above 2 g, roughness 0.5-1.2 x riding.
-    pair_pop_g: float = 2.5
+    # Re-tuned on session 5 against 27 Surfr-phone jumps (and still covering session 1):
+    # pops 2.25-3.8 g, impacts 2.7-4.9 g, 2.6-5.1 s apart, flight level 0.86-1.19 g,
+    # largest bump in the air <= 2.32 g, roughness in the air <= 1.4 x riding.
+    pair_pop_g: float = 2.2
     pair_impact_g: float = 2.5
     pair_min_s: float = 1.0
-    pair_max_s: float = 8.0
-    pair_mid_max_peak_g: float = 2.0
-    pair_mid_max_level_g: float = 1.0
-    pair_mid_max_rough_ratio: float = 1.2
+    pair_max_s: float = 7.0
+    pair_mid_max_peak_g: float = 2.4
+    pair_mid_max_level_g: float = 1.15
+    pair_mid_max_rough_ratio: float = 1.45
+    pair_min_speed_mps: float = 4.2     # 15 km/h at the pop
     baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
                                      # first real session showed no baro rise even on a clean 3 s jump
 
@@ -390,25 +394,28 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
 
 
 def _impulse_pairs(s, F, p, existing):
-    """Pop -> impact pairs with a quiet middle (see DetectParams).  Jumped transitions nearly
-    stop in the air, so the speed-collapse gate is not applied here."""
+    """Pop -> impact pairs with a quiet-ish middle (see DetectParams).  The impact is the FIRST
+    peak >= pair_impact_g after pair_min_s; smaller bumps in between are allowed up to
+    pair_mid_max_peak_g.  Jumped transitions nearly stop in the air, so the speed-collapse
+    gate is not applied here; the speed at the pop must show the rider was planing."""
     n = len(F.t)
-    pk, _ = signal.find_peaks(F.m4, height=p.pair_pop_g, distance=8)
+    pk, _ = signal.find_peaks(F.m4, height=min(p.pair_pop_g, p.pair_impact_g), distance=6)
+    pops = [a for a in pk if F.m4[a] >= p.pair_pop_g]
+    impacts = [b for b in pk if F.m4[b] >= p.pair_impact_g]
     out = []
-    for a in pk:
-        lo, hi = a + int(p.pair_min_s * FS), min(n, a + int(p.pair_max_s * FS))
-        if hi <= lo:
+    taken_until = -np.inf
+    for a in pops:
+        if F.t[a] < taken_until:
             continue
-        nxt = [b for b in pk if lo <= b < hi]
+        lo, hi = a + int(p.pair_min_s * FS), min(n, a + int(p.pair_max_s * FS))
+        nxt = [b for b in impacts if lo <= b < hi]
         if not nxt:
             continue
         b = int(nxt[0])
-        if F.m4[b] < p.pair_impact_g:
-            continue
-        i0, i1 = a + int(0.3 * FS), b - int(0.2 * FS)
+        i0, i1 = a + int(0.3 * FS), b - int(0.25 * FS)
         if i1 - i0 < int(0.4 * FS):
             continue
-        mid_rough = np.nanmedian(np.where(np.isinf(F.rough[i0:i1]), np.nan, F.rough[i0:i1]))
+        mid_rough = float(np.nanmedian(np.where(np.isinf(F.rough[i0:i1]), np.nan, F.rough[i0:i1])))
         ref = float(np.nanmedian(F.rough_ref[i0:i1]))
         level = float(np.nanmedian(F.m1[i0:i1]))
         if np.nanmax(F.m4[i0:i1]) >= p.pair_mid_max_peak_g or level > p.pair_mid_max_level_g or mid_rough > p.pair_mid_max_rough_ratio * ref:
@@ -416,7 +423,8 @@ def _impulse_pairs(s, F, p, existing):
         if s.valid[a:b].mean() < p.min_valid_frac:
             continue
         t_to = F.t[a]
-        i_raw = b - int(0.3 * FS) + int(np.nanargmax(F.mag_f[b - int(0.3 * FS):b + int(0.3 * FS)]))
+        j0, j1 = max(a + 1, b - int(0.3 * FS)), min(n, b + int(0.3 * FS))
+        i_raw = j0 + int(np.nanargmax(F.mag_f[j0:j1]))
         k = i_raw
         while k > a and F.mag_f[k] > level + p.landing_rise_g:
             k -= 1
@@ -427,14 +435,14 @@ def _impulse_pairs(s, F, p, existing):
             continue
         spd = float(np.interp(t_to, F.t, F.speed)) if np.isfinite(F.speed).any() else np.nan
         reasons = []
-        if not np.isnan(spd) and spd < p.min_speed_mps:
+        if not np.isnan(spd) and spd < max(p.min_speed_mps, p.pair_min_speed_mps):
             reasons.append("slow")
         if airtime <= 0.3 or airtime > p.max_airtime_s:
             reasons.append("airtime_range")
         if p.min_rough_ref_g > 0 and ref < p.min_rough_ref_g:
             reasons.append("no_vibration_context")
         c = JumpCandidate(F.t[i0], F.t[i1], t_to, t_land, airtime, float(F.m4[a]), float(F.m4[b]), level,
-                          float(mid_rough), ref, spd)
+                          mid_rough, ref, spd)
         c.accepted = not reasons
         c.reject_reason = ",".join(reasons)
         c.flags = "impulse_pair"
@@ -442,4 +450,6 @@ def _impulse_pairs(s, F, p, existing):
         c.takeoff_jerk_g = float(F.jerk[max(0, a - 5):a + 5].max())
         c.landing_jerk_g = float(F.jerk[max(0, b - 5):b + 5].max())
         out.append(c)
+        if c.accepted:
+            taken_until = t_land + 0.5
     return out
