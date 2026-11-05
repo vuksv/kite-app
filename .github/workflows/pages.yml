@@ -23,7 +23,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Stage site (same layout as "deploy from branch": app in web/, sessions/ beside it, root redirects)
+      - name: "Stage site - same layout as deploy-from-branch (app in web/, sessions/ beside it, root redirects)"
         run: |
           mkdir -p _site
           cp index.html all.html .nojekyll _site/
