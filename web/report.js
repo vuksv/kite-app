@@ -365,7 +365,7 @@ async function listRecorded() {
     const r = await fetch('sessions/sessions.json', { cache: 'no-cache' }); if (!r.ok) return;
     const list = await r.json(); if (!list.length) return;
     const el = $('recorded'); el.classList.remove('hidden');
-    el.innerHTML = '<h2 style="margin-top:0">Recorded sessions</h2><div class="row">' + list.map(e =>
+    el.innerHTML = '<h2 style="margin-top:0">Recorded sessions</h2><p><a class="btn" href="all.html"><b>All sessions overview →</b></a></p><div class="row">' + list.map(e =>
       `<a class="btn" href="?fit=sessions/${encodeURIComponent(e.file)}">${esc(e.start_utc.slice(0, 10))} · ${esc(e.label)}${e.note ? ' <span class="pill warn">' + esc(e.note) + '</span>' : ''}</a>`).join('') + '</div>';
   } catch (e) { /* no list on this host */ }
 }

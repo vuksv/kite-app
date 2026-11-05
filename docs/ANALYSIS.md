@@ -122,7 +122,10 @@ Keep the FIT files: every tuning change can be replayed over all sessions with
   Surfr. Pop-to-landing airtime is ~0.9 s shorter than Surfr's airtime. `a_eff` = 2.0 m/s²
   puts KiteLog 0.5 m below Surfr on average; 2.2 would match Surfr exactly, but the
   independent study found Surfr overestimates by about that much, so 2.0 stays the default.
-  `tools/tests/test_real_sessions.py` locks these numbers in.
+  A pair longer than 4.8 s must pop at ≥ 2.6 g: the widened rules let two chop slams 6–6.5 s
+  apart through as 9–11 m "jumps", both with 2.3 g pops, while every real long jump popped at
+  ≥ 3.0 g. Session total after that: 48 vs Surfr's 54, the last hour 25 vs 25, best jump
+  6.8 m vs Surfr's 6.6 m. `tools/tests/test_real_sessions.py` locks these numbers in.
 * The barometer is useless on the water as worn: steps of hundreds of Pa (water on the
   port) and no visible rise even on that clean jump. Heights therefore come from the airtime
   model (`a_eff`, to be calibrated against video/WOO); the barometer veto is off by default.

@@ -176,7 +176,8 @@ export const DEFAULT_DETECT = {
   bridgeRoughRatio: 1.0,
   maxLevelWithoutPopG: 0.95, popPeakG: 2.0,
   // impulse-pair generator, re-tuned on session 5 against 27 Surfr-phone jumps (see tools/kitelog/detect.py)
-  pairPopG: 2.2, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 7.0, pairMidMaxPeakG: 2.4, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 1.45, pairMinSpeedMps: 4.2,      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
+  pairPopG: 2.2, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 7.0, pairMidMaxPeakG: 2.4, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 1.45, pairMinSpeedMps: 4.2,
+  pairLongS: 4.8, pairLongMinPopG: 2.6,          // a pair longer than 4.8 s needs a pop >= 2.6 g (session 5: false long pairs popped at 2.3 g)      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
   baroGate: false,                               // barometer veto off: the port gets wet on the water (see docs/ANALYSIS.md)
 };
 
@@ -318,6 +319,7 @@ function impulsePairs(s, F, p, existing) {
     const reasons = [];
     if (Number.isFinite(spd) && spd < Math.max(p.minSpeedMps, p.pairMinSpeedMps)) reasons.push('slow');
     if (airtime <= 0.3 || airtime > p.maxAirtimeS) reasons.push('airtime_range');
+    if (airtime > p.pairLongS && F.m4[a] < p.pairLongMinPopG) reasons.push('long_weak_pop');
     if (p.minRoughRefG > 0 && ref < p.minRoughRefG) reasons.push('no_vibration_context');
     const c = { tSmoothStart: F.t[i0], tSmoothEnd: F.t[i1], tTo, tLand, airtime, takeoffPeakG: F.m4[a], landingPeakG: F.m4[b], flightLevelG: level,
       roughIn: midRough, roughRef: ref, speedTo: spd, takeoffJerkG: nanmax(F.jerk.subarray(Math.max(0, a - 5), a + 5)), landingJerkG: nanmax(F.jerk.subarray(Math.max(0, b - 5), b + 5)),

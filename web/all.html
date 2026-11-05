@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiteLog Sessions</title>
+<meta name="description" content="Every recorded KiteLog session on one page: totals, per-session stats, all jumps and the best jumps.">
+<link rel="stylesheet" href="style.css">
+<style>
+  .bar { height: 6px; border-radius: 3px; background: var(--s2); display: inline-block; vertical-align: middle; }
+  td a { color: var(--s1); }
+  .sub { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>All sessions</h1>
+  <p>Every recording in the archive, analysed in your browser with the current pipeline (and your saved analysis settings).
+     New sessions appear here automatically. <a href="./">Open a single file</a></p>
+  <div id="status" class="status"></div>
+
+  <section id="content" class="hidden">
+    <div class="grid" id="tiles"></div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Sessions</h2>
+      <div class="tablewrap"><table id="sessions"><thead></thead><tbody></tbody></table></div>
+      <p class="sub">Tap a session to open its full report. GPS-only sessions (recorded with another app) count towards distance and speed, not jumps.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Every jump</h2>
+      <div id="scatter"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Best jumps</h2>
+      <div class="row noprint" style="margin-bottom:8px">
+        <label class="field" style="max-width:220px">Sort by
+          <select id="bestBy"><option value="height">height</option><option value="airtime">airtime</option><option value="distance">length</option></select></label>
+      </div>
+      <div class="tablewrap"><table id="best"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <footer>KiteLog · <a href="https://github.com/vuksv/kite-app">github.com/vuksv/kite-app</a> · analysis runs locally in the browser</footer>
+</main>
+<script type="module" src="all.js"></script>
+</body>
+</html>

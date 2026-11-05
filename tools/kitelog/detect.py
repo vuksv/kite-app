@@ -77,6 +77,8 @@ class DetectParams:
     pair_mid_max_level_g: float = 1.15
     pair_mid_max_rough_ratio: float = 1.45
     pair_min_speed_mps: float = 4.2     # 15 km/h at the pop
+    pair_long_s: float = 4.8            # a pair longer than this needs a strong pop: in session 5 every real
+    pair_long_min_pop_g: float = 2.6    # long jump popped at >= 3.0 g, the two false ones (chop slams) at 2.3 g
     baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
                                      # first real session showed no baro rise even on a clean 3 s jump
 
@@ -439,6 +441,8 @@ def _impulse_pairs(s, F, p, existing):
             reasons.append("slow")
         if airtime <= 0.3 or airtime > p.max_airtime_s:
             reasons.append("airtime_range")
+        if airtime > p.pair_long_s and F.m4[a] < p.pair_long_min_pop_g:
+            reasons.append("long_weak_pop")
         if p.min_rough_ref_g > 0 and ref < p.min_rough_ref_g:
             reasons.append("no_vibration_context")
         c = JumpCandidate(F.t[i0], F.t[i1], t_to, t_land, airtime, float(F.m4[a]), float(F.m4[b]), level,

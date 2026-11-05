@@ -54,6 +54,12 @@ a ride (S5).
 3. **BACK** opens *Resume / Save / Discard*. Leaving the app with a session open saves it.
 4. Sync. The activity shows up as *Kiteboarding* in Garmin Connect.
 
+## All sessions on one page
+
+<https://vuksv.github.io/kite-app/all.html> analyses every file in `sessions/` in the browser:
+totals, a row per session, every jump on one chart, and the best jumps. Sessions added with
+`tools/add_session.py` show up there automatically.
+
 ## Analysing
 
 Phone: export the activity from connect.garmin.com (*Export Original*), open the report page
