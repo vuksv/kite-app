@@ -45,7 +45,14 @@ def test_session5_against_surfr():
     assert 44 <= len(acc) <= 58, f"session total {len(acc)} far from Surfr's 54"
 
 
-@pytest.mark.parametrize("name,lo,hi", [("2026-11-03_brazil-1.fit", 13, 20), ("2026-11-03_brazil-4.fit", 6, 11)])
+@pytest.mark.parametrize("name,lo,hi", [("2026-11-03_brazil-1.fit", 13, 20), ("2026-11-03_brazil-4.fit", 6, 11),
+                                         ("2026-11-05_brazil-6.fit", 4, 9), ("2026-11-05_brazil-7.fit", 17, 27)])
 def test_other_sessions_counts(name, lo, hi):
     _, acc = _jumps(name)
     assert lo <= len(acc) <= hi
+
+
+def test_no_riding_off_jump():
+    """Session 7 had an 11.4 m / 6.75 s 'jump' that was a slam plus riding off (speed +9 km/h in the air)."""
+    _, acc = _jumps("2026-11-05_brazil-7.fit")
+    assert acc.airtime_s.max() < 6.5 and acc.height_m.max() < 10.0

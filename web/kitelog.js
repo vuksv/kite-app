@@ -177,7 +177,8 @@ export const DEFAULT_DETECT = {
   maxLevelWithoutPopG: 0.95, popPeakG: 2.0,
   // impulse-pair generator, re-tuned on session 5 against 27 Surfr-phone jumps (see tools/kitelog/detect.py)
   pairPopG: 2.2, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 7.0, pairMidMaxPeakG: 2.4, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 1.45, pairMinSpeedMps: 4.2,
-  pairLongS: 4.8, pairLongMinPopG: 2.6,          // a pair longer than 4.8 s needs a pop >= 2.6 g (session 5: false long pairs popped at 2.3 g)      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
+  pairLongS: 4.8, pairLongMinPopG: 2.6,
+  maxAirSpeedGainMps: 2.0,                       // GPS speed in the air may not rise > 2 m/s above take-off (riding off is not a jump)          // a pair longer than 4.8 s needs a pop >= 2.6 g (session 5: false long pairs popped at 2.3 g)      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
   baroGate: false,                               // barometer veto off: the port gets wet on the water (see docs/ANALYSIS.md)
 };
 
@@ -272,6 +273,7 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
     if (p.landingMinJerkG > 0 && !landingInGap && jerkLand < p.landingMinJerkG) reasons.push('no_landing_jerk');
     if (Number.isFinite(spd) && spd < p.minSpeedMps) reasons.push('slow');
     if (Number.isFinite(spdMin) && spdMin < Math.max(p.minFlightSpeedMps, p.minFlightSpeedRatio * spd)) reasons.push('speed_collapse');
+    if (airSpeedGain(F, tTo, tLand) > p.maxAirSpeedGainMps) reasons.push('speed_gain');
     if (airtime <= 0.3 || airtime > p.maxAirtimeS) reasons.push('airtime_range');
     let vf = 0; for (let i = a; i < b; i++) vf += s.valid[i]; vf /= (b - a);
     if (vf < p.minValidFrac) reasons.push('gap_inside'); else if (vf < 1) flags.push('gap_in_flight');
@@ -283,6 +285,13 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
   for (const c of impulsePairs(s, F, p, cands)) cands.push(c);
   cands.sort((x, y) => x.tTo - y.tTo);
   return { cands, F };
+}
+
+// largest GPS speed in the air minus the speed at take-off (m/s); NaN without GPS
+function airSpeedGain(F, tTo, tLand) {
+  let m = -Infinity; for (let i = 0; i < F.t.length; i++) if (F.t[i] >= tTo && F.t[i] <= tLand && Number.isFinite(F.speed[i]) && F.speed[i] > m) m = F.speed[i];
+  if (m === -Infinity) return NaN;
+  return m - interp(tTo, F.t, F.speed);
 }
 
 function peaks(x, h, dist) {
@@ -320,6 +329,7 @@ function impulsePairs(s, F, p, existing) {
     if (Number.isFinite(spd) && spd < Math.max(p.minSpeedMps, p.pairMinSpeedMps)) reasons.push('slow');
     if (airtime <= 0.3 || airtime > p.maxAirtimeS) reasons.push('airtime_range');
     if (airtime > p.pairLongS && F.m4[a] < p.pairLongMinPopG) reasons.push('long_weak_pop');
+    if (airSpeedGain(F, tTo, tLand) > p.maxAirSpeedGainMps) reasons.push('speed_gain');
     if (p.minRoughRefG > 0 && ref < p.minRoughRefG) reasons.push('no_vibration_context');
     const c = { tSmoothStart: F.t[i0], tSmoothEnd: F.t[i1], tTo, tLand, airtime, takeoffPeakG: F.m4[a], landingPeakG: F.m4[b], flightLevelG: level,
       roughIn: midRough, roughRef: ref, speedTo: spd, takeoffJerkG: nanmax(F.jerk.subarray(Math.max(0, a - 5), a + 5)), landingJerkG: nanmax(F.jerk.subarray(Math.max(0, b - 5), b + 5)),

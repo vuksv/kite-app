@@ -126,6 +126,14 @@ Keep the FIT files: every tuning change can be replayed over all sessions with
   apart through as 9–11 m "jumps", both with 2.3 g pops, while every real long jump popped at
   ≥ 3.0 g. Session total after that: 48 vs Surfr's 54, the last hour 25 vs 25, best jump
   6.8 m vs Surfr's 6.6 m. `tools/tests/test_real_sessions.py` locks these numbers in.
+* **Sessions 6 and 7 (Nov 5).** The afternoon file's first record carried FIT "invalid"
+  placeholders (timer 0xFFFFFFFF), which stretched the Python timeline to 46 days; such records
+  are now dropped (the browser already ignored them). It then showed an 11.4 m / 6.75 s "jump"
+  that was a slam followed by riding off after a slow turn: GPS speed rose 9 km/h "in the air".
+  None of the 20 Surfr-confirmed jumps gains more than 2.75 km/h in the air, so a jump may not
+  gain more than 2 m/s (7.2 km/h) over its take-off speed (rule `speed_gain`). Session 6 only
+  overlaps the last 16 min of that day's Surfr recording (Surfr 9 jumps there, KiteLog 6;
+  Surfr times are minute-rounded with an unknown start second, so no per-jump check).
 * The barometer is useless on the water as worn: steps of hundreds of Pa (water on the
   port) and no visible rise even on that clean jump. Heights therefore come from the airtime
   model (`a_eff`, to be calibrated against video/WOO); the barometer veto is off by default.

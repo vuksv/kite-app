@@ -1,5 +1,18 @@
 [
  {
+  "file": "2026-11-05_brazil-7.fit",
+  "start_utc": "2026-11-05T20:02:47+00:00",
+  "records": 3024,
+  "label": "brazil 7"
+ },
+ {
+  "file": "2026-11-05_brazil-6.fit",
+  "start_utc": "2026-11-05T16:09:54+00:00",
+  "records": 966,
+  "label": "brazil 6",
+  "note": "Surfr phone overlaps its 16 min"
+ },
+ {
   "file": "2026-11-04_brazil-5.fit",
   "start_utc": "2026-11-04T18:30:10+00:00",
   "records": 6141,

@@ -77,6 +77,9 @@ class DetectParams:
     pair_mid_max_level_g: float = 1.15
     pair_mid_max_rough_ratio: float = 1.45
     pair_min_speed_mps: float = 4.2     # 15 km/h at the pop
+    max_air_speed_gain_mps: float = 2.0  # GPS speed in the air may not rise > 2 m/s (7.2 km/h) above take-off:
+                                         # the 20 Surfr-confirmed jumps gained <= 0.76 m/s, riding off after a slow
+                                         # turn (false 11.4 m "jump", 2026-11-05) gained 2.6 m/s; 1.0 cost simulated recall
     pair_long_s: float = 4.8            # a pair longer than this needs a strong pop: in session 5 every real
     pair_long_min_pop_g: float = 2.6    # long jump popped at >= 3.0 g, the two false ones (chop slams) at 2.3 g
     baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
@@ -107,6 +110,13 @@ def build_streams(records: pd.DataFrame) -> Streams:
     # records written before the first accelerometer batch carry no samples and a
     # placeholder tmr (0 or invalid) that would sort them out of time order
     rec = records[records["acc_0"].notna()].copy()
+    # FIT "invalid" placeholders (UINT32 0xFFFFFFFF) appear on a record written before the first
+    # batch arrived (seen on the 2026-11-05 afternoon session): they would stretch the timeline
+    # to 46 days.  Drop them, and any record whose timer disagrees with its timestamp by > 60 s.
+    rec = rec[(rec["tmr"].astype("int64") != 0xFFFFFFFF) & (rec["meta"].astype("int64") != 0xFFFFFFFF) & (rec["tmr"].astype("int64") > 0)]
+    if len(rec) >= 10:
+        lag = rec["ts"].to_numpy(dtype=float) - rec["tmr"].to_numpy(dtype=float) / 1000.0
+        rec = rec[np.abs(lag - np.median(lag)) < 60.0]
     meta = rec["meta"].astype(np.int64).map(P.unpack_meta)
     rec["seq"] = [m["seq"] for m in meta]
     rec["n_valid"] = [m["n_valid"] for m in meta]
@@ -255,6 +265,16 @@ class JumpCandidate:
     source: str = "smooth"
 
 
+def _air_speed_gain(F, t_to, t_land):
+    """Largest GPS speed in the air minus the speed at take-off (m/s); nan without GPS."""
+    if not np.isfinite(F.speed).any():
+        return np.nan
+    sel = (F.t >= t_to) & (F.t <= t_land)
+    if not sel.any():
+        return np.nan
+    return float(np.nanmax(F.speed[sel]) - np.interp(t_to, F.t, F.speed))
+
+
 def _last_peak(x, a0, a1, thr):
     """Index of the last local maximum of x[a0:a1] that exceeds thr, else None."""
     seg = x[a0:a1]
@@ -385,6 +405,8 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
             reasons.append("slow")
         if not np.isnan(spd_min) and spd_min < max(p.min_flight_speed_mps, p.min_flight_speed_ratio * spd):
             reasons.append("speed_collapse")      # transitions / crashes: speed dies while a jump keeps most of it (smooth candidates only)
+        if _air_speed_gain(F, t_to, t_land) > p.max_air_speed_gain_mps:
+            reasons.append("speed_gain")
         if airtime <= 0.3 or airtime > p.max_airtime_s:
             reasons.append("airtime_range")
         c.accepted = not reasons
@@ -443,6 +465,8 @@ def _impulse_pairs(s, F, p, existing):
             reasons.append("airtime_range")
         if airtime > p.pair_long_s and F.m4[a] < p.pair_long_min_pop_g:
             reasons.append("long_weak_pop")
+        if _air_speed_gain(F, t_to, t_land) > p.max_air_speed_gain_mps:
+            reasons.append("speed_gain")
         if p.min_rough_ref_g > 0 and ref < p.min_rough_ref_g:
             reasons.append("no_vibration_context")
         c = JumpCandidate(F.t[i0], F.t[i1], t_to, t_land, airtime, float(F.m4[a]), float(F.m4[b]), level,
