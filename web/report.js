@@ -353,16 +353,19 @@ async function uploadToCloud() {
 }
 
 // ------------------------------------------------------------------ recorded sessions (sessions/sessions.json on the site)
+// The app lives in web/, recorded sessions in sessions/ next to it (same layout however the
+// site is published), so "sessions/x.fit" links are fetched from "../sessions/x.fit".
+const sessionsPath = (path) => path.startsWith('sessions/') ? '../' + path : path;
 async function loadFromUrl(url) {
   try {
     setStatus('Loading ' + url + ' …');
-    const r = await fetch(url); if (!r.ok) throw new Error(r.status);
+    const r = await fetch(sessionsPath(url)); if (!r.ok) throw new Error(r.status);
     await loadBuffer(await r.arrayBuffer(), url.split('/').pop());
   } catch (e) { setStatus('Could not load ' + url + ': ' + (e.message || e), true); }
 }
 async function listRecorded() {
   try {
-    const r = await fetch('sessions/sessions.json', { cache: 'no-cache' }); if (!r.ok) return;
+    const r = await fetch(sessionsPath('sessions/sessions.json'), { cache: 'no-cache' }); if (!r.ok) return;
     const list = await r.json(); if (!list.length) return;
     const el = $('recorded'); el.classList.remove('hidden');
     el.innerHTML = '<h2 style="margin-top:0">Recorded sessions</h2><p><a class="btn" href="all.html"><b>All sessions overview →</b></a></p><div class="row">' + list.map(e =>

@@ -1,11 +1,12 @@
 # Publishes the report app to GitHub Pages: https://vuksv.github.io/kite-app/
-# Works with either Pages source: "GitHub Actions" (this workflow) or "Deploy from a branch"
-# (the root index.html redirects to web/).
+# Works with either Pages source: "GitHub Actions" (this workflow) or "Deploy from a branch".
+# Both publish the same tree: web/ (the app), sessions/, docs/, and root redirects
+# index.html -> web/ and all.html -> web/all.html.
 name: Deploy report app to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", "index.html", "docs/**", "sessions/**", ".github/workflows/pages.yml"]
+    paths: ["web/**", "index.html", "all.html", "docs/**", "sessions/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,14 +23,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Stage site (app at the root, also under /web, docs alongside)
+      - name: Stage site (same layout as "deploy from branch": app in web/, sessions/ beside it, root redirects)
         run: |
-          mkdir -p _site/web _site/docs
-          cp -r web/. _site/
-          cp -r web/. _site/web/
-          cp -r docs/. _site/docs/
-          if [ -d sessions ]; then mkdir -p _site/sessions _site/web/sessions && cp -r sessions/. _site/sessions/ && cp -r sessions/. _site/web/sessions/; fi
-          touch _site/.nojekyll
+          mkdir -p _site
+          cp index.html all.html .nojekyll _site/
+          cp -r web sessions docs _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

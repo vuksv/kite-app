@@ -10,6 +10,7 @@ const hm = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 360
 const day = (unix) => new Date(unix * 1000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 const clock = (unix) => new Date(unix * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const link = (e) => `./?fit=sessions/${encodeURIComponent(e.file)}`;
+const SESSIONS = '../sessions/';      // app in web/, sessions/ beside it (same in every publishing mode)
 
 function setStatus(msg, err = false) { const el = $('status'); el.textContent = msg; el.className = 'status' + (err ? ' err' : ''); }
 
@@ -30,7 +31,7 @@ function savedParams() {
 async function main() {
   let list;
   try {
-    const r = await fetch('sessions/sessions.json', { cache: 'no-cache' });
+    const r = await fetch(SESSIONS + 'sessions.json', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     list = await r.json();
   } catch (e) { setStatus('No session list found (sessions/sessions.json).', true); return; }
@@ -40,7 +41,7 @@ async function main() {
     const e = list[i];
     setStatus(`Analysing ${i + 1} of ${list.length}: ${e.label} …`);
     try {
-      const r = await fetch('sessions/' + encodeURIComponent(e.file));
+      const r = await fetch(SESSIONS + encodeURIComponent(e.file));
       if (!r.ok) throw new Error(r.status);
       const fit = decodeFit(await unwrapFit(await r.arrayBuffer(), e.file));
       const res = analyze(fit.records, d, h);
