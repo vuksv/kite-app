@@ -60,6 +60,12 @@ a ride (S5).
 totals, a row per session, every jump on one chart, and the best jumps. Sessions added with
 `tools/add_session.py` show up there automatically.
 
+## GoPro cross-check
+
+<https://vuksv.github.io/kite-app/gopro.html> reads the telemetry inside original GoPro clips
+(HERO5+) on the phone, finds the matching KiteLog session, and lists each KiteLog jump with its
+time in the video and the camera's own airtime. See `docs/ANALYSIS.md` §2b.
+
 ## Analysing
 
 Phone: export the activity from connect.garmin.com (*Export Original*), open the report page

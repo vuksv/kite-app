@@ -18,3 +18,4 @@ jobs:
         with:
           node-version: "22"
       - run: node web/test/compare.mjs web/sample/synthetic.fit web/test/expected_jumps.csv
+      - run: node web/test/gopro_align.mjs sessions/2026-11-05_brazil-7.fit

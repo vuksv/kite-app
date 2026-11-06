@@ -58,6 +58,28 @@ jump; the numbers are still reported but less certain.
 rejected – the most useful view while tuning on the first real sessions. Re-analyse applies
 the new values to the loaded file; Defaults restores the values from `kitelog.js`.
 
+## 2b. GoPro cross-check (HERO5 and newer)
+
+Every GoPro MP4 from a HERO5 or newer carries a telemetry track: UTC time from the camera's GPS,
+~18 Hz GPS (position, speed) and a ~200 Hz accelerometer and gyroscope. Open
+<https://vuksv.github.io/kite-app/gopro.html> and pick one or more **original** clips (Quik
+"Save" to Files, or the SD card; videos exported through the photo library lose the track).
+Only the small telemetry payloads are read, on the phone; the video is never uploaded.
+
+* **Lining up:** with a GPS fix, the camera's GPS clock places the clip (refined by matching the
+  hits and slams both devices feel). Without GPS (Preferences › Regional › GPS on the camera)
+  the clip is found by that motion pattern alone; the camera's own clock is local time and is
+  not trusted. A weak match is flagged.
+* **What you get per clip:** the KiteLog session, every KiteLog jump in the clip with its
+  **time in the video** (scrub there and count the airtime on the footage), KiteLog's and the
+  GoPro's own pop-to-impact airtime, and a chart of both accelerometers around each jump.
+* **Download telemetry** saves ~2 KB per second of video (`.gopro.json.gz`) – send that file
+  instead of the video for a deeper comparison.
+
+`web/gpmf.js` was checked against GoPro's reference parser on GoPro's sample clips (HERO5–8,
+MAX): identical samples, timing within 0.08 s. `web/test/gopro_align.mjs` checks the alignment
+recovers a known offset within 0.3 s on clips simulated from a real session.
+
 ## 3. Python tools (computer)
 
 ```

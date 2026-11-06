@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiteLog GoPro Check</title>
+<meta name="description" content="Cross-check KiteLog jumps against the telemetry and video of a GoPro clip, read locally on the phone.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>GoPro cross-check</h1>
+  <p>Pick one or more original GoPro MP4 clips (HERO5 or newer). Only the clip's built-in telemetry is read, on this device;
+     the video is never uploaded. The page finds the KiteLog session the clip belongs to, lists the KiteLog jumps that
+     happen in the clip with their <b>time in the video</b> so you can scrub to them, and compares the two motion sensors.</p>
+  <p class="sub" style="font-size:13px">Use the original file (GoPro Quik "Save" to Files, or the camera's SD card). Videos exported
+     through the photo library are re-encoded without telemetry. GPS on the camera (Preferences › Regional › GPS) gives the
+     exact clock; without it the clip is matched to KiteLog by the pattern of hits and slams.</p>
+
+  <section class="card noprint">
+    <input id="clips" type="file" accept="video/mp4,video/quicktime,.mp4,.MP4" multiple>
+    <div id="status" class="status"></div>
+    <p style="font-size:13px;margin-top:8px"><a href="./">Single session</a> · <a href="all.html">All sessions</a></p>
+  </section>
+
+  <div id="results"></div>
+  <footer>KiteLog · <a href="https://github.com/vuksv/kite-app">github.com/vuksv/kite-app</a> · the video never leaves your device</footer>
+</main>
+<script type="module" src="gopro.js"></script>
+</body>
+</html>

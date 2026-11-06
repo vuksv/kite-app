@@ -6,7 +6,7 @@ name: Deploy report app to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", "index.html", "all.html", "docs/**", "sessions/**", ".github/workflows/pages.yml"]
+    paths: ["web/**", "index.html", "all.html", "gopro.html", "docs/**", "sessions/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
       - name: "Stage site - same layout as deploy-from-branch (app in web/, sessions/ beside it, root redirects)"
         run: |
           mkdir -p _site
-          cp index.html all.html .nojekyll _site/
+          cp index.html all.html gopro.html .nojekyll _site/
           cp -r web sessions docs _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
