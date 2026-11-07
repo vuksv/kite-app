@@ -22,25 +22,27 @@ function readParams() {
   d.baroGate = $('baroGate').checked;
   const vMin = parseFloat($('minSpeedKmh').value);        // entered in km/h, detector works in m/s
   if (Number.isFinite(vMin)) d.minSpeedMps = vMin / KMH;
-  const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || 2.0 };
+  const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || DEFAULT_HEIGHT.aEff };
+  const off = parseFloat($('airtimeOffsetS').value); if (Number.isFinite(off)) h.airtimeOffsetS = off;
   return { d, h };
 }
 function applyDefaults() {
   for (const id of PARAM_IDS) $(id).value = DEFAULT_DETECT[id];
   $('minSpeedKmh').value = +(DEFAULT_DETECT.minSpeedMps * KMH).toFixed(1);
   $('aEff').value = DEFAULT_HEIGHT.aEff;
+  $('airtimeOffsetS').value = DEFAULT_HEIGHT.airtimeOffsetS;
 }
 function setDefaults() {                       // the Defaults button: also forget persisted tweaks
   applyDefaults();
-  try { localStorage.removeItem('kitelog.params'); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem('kitelog.params.v2'); } catch (e) { /* ignore */ }
 }
 // analysis settings changed on the phone persist between visits (Defaults clears them)
 function saveParams() {
-  const o = {}; for (const id of [...PARAM_IDS, 'minSpeedKmh', 'aEff', 'unit']) o[id] = $(id).value;
-  try { localStorage.setItem('kitelog.params', JSON.stringify(o)); } catch (e) { /* ignore */ }
+  const o = {}; for (const id of [...PARAM_IDS, 'minSpeedKmh', 'aEff', 'airtimeOffsetS', 'unit']) o[id] = $(id).value;
+  try { localStorage.setItem('kitelog.params.v2', JSON.stringify(o)); } catch (e) { /* ignore */ }
 }
 function loadParams() {
-  try { const o = JSON.parse(localStorage.getItem('kitelog.params') || 'null'); if (o) for (const k in o) if ($(k)) $(k).value = o[k]; } catch (e) { /* ignore */ }
+  try { const o = JSON.parse(localStorage.getItem('kitelog.params.v2') || 'null'); if (o) for (const k in o) if ($(k)) $(k).value = o[k]; } catch (e) { /* ignore */ }
 }
 
 // ------------------------------------------------------------------ loading
@@ -411,7 +413,7 @@ $('printBtn').addEventListener('click', () => window.print());
 $('mapBtn').addEventListener('click', showMap);
 $('cloudBtn').addEventListener('click', uploadToCloud);
 $('listBtn').addEventListener('click', listSessions);
-for (const id of [...PARAM_IDS, 'minSpeedKmh', 'aEff']) $(id).addEventListener('change', saveParams);
+for (const id of [...PARAM_IDS, 'minSpeedKmh', 'aEff', 'airtimeOffsetS']) $(id).addEventListener('change', saveParams);
 $('cloudUrl').addEventListener('change', saveCloudSettings);
 $('cloudToken').addEventListener('change', saveCloudSettings);
 applyDefaults();

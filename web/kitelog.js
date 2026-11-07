@@ -176,7 +176,8 @@ export const DEFAULT_DETECT = {
   bridgeRoughRatio: 1.0,
   maxLevelWithoutPopG: 0.95, popPeakG: 2.0,
   // impulse-pair generator, re-tuned on session 5 against 27 Surfr-phone jumps (see tools/kitelog/detect.py)
-  pairPopG: 2.2, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 7.0, pairMidMaxPeakG: 2.4, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 1.45, pairMinSpeedMps: 4.2,
+  pairPopG: 2.2, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 7.0, pairMidMaxPeakG: 2.6, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 2.2, pairMinSpeedMps: 4.2,
+  pairPrepopS: 2.0,                              // a pair this short whose impact starts a jump of its own is a pre-pop bump
   pairLongS: 4.8, pairLongMinPopG: 2.6,
   maxAirSpeedGainMps: 2.0,                       // GPS speed in the air may not rise > 2 m/s above take-off (riding off is not a jump)          // a pair longer than 4.8 s needs a pop >= 2.6 g (session 5: false long pairs popped at 2.3 g)      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
   baroGate: false,                               // barometer veto off: the port gets wet on the water (see docs/ANALYSIS.md)
@@ -306,18 +307,27 @@ function peaks(x, h, dist) {
 function impulsePairs(s, F, p, existing) {
   const n = F.t.length, pk = peaks(F.m4, Math.min(p.pairPopG, p.pairImpactG), 6), out = [];
   const pops = pk.filter(a => F.m4[a] >= p.pairPopG), impacts = pk.filter(b => F.m4[b] >= p.pairImpactG);
+  // [impact index, level, mid roughness, riding roughness] if a starts a jump-shaped pair, else null
+  const shape = (a) => {
+    const lo = a + Math.trunc(p.pairMinS * FS), hi = Math.min(n, a + Math.trunc(p.pairMaxS * FS));
+    const b = impacts.find(q => q >= lo && q < hi);
+    if (b === undefined) return null;
+    const i0 = a + Math.trunc(0.3 * FS), i1 = b - Math.trunc(0.25 * FS);
+    if (i1 - i0 < Math.trunc(0.4 * FS)) return null;
+    const midRough = median(Array.from(F.rough.subarray(i0, i1)).map(v => Number.isFinite(v) ? v : NaN));
+    const ref = median(F.roughRef.subarray(i0, i1)), level = median(F.m1.subarray(i0, i1));
+    if (nanmax(F.m4.subarray(i0, i1)) >= p.pairMidMaxPeakG || level > p.pairMidMaxLevelG || midRough > p.pairMidMaxRoughRatio * ref) return null;
+    let vf = 0; for (let i = a; i < b; i++) vf += s.valid[i]; if (vf / (b - a) < p.minValidFrac) return null;
+    return [b, level, midRough, ref];
+  };
   let takenUntil = -Infinity;
   for (const a of pops) {
     if (F.t[a] < takenUntil) continue;
-    const lo = a + Math.trunc(p.pairMinS * FS), hi = Math.min(n, a + Math.trunc(p.pairMaxS * FS));
-    const b = impacts.find(q => q >= lo && q < hi);
-    if (b === undefined) continue;
+    const sh = shape(a); if (!sh) continue;
+    const [b, level, midRough, ref] = sh;
+    // a bump just before the real pop pairs with the pop as its "impact": skip it if the impact starts a jump of its own
+    if ((b - a) / FS < p.pairPrepopS && F.m4[b] >= p.pairPopG && shape(b)) continue;
     const i0 = a + Math.trunc(0.3 * FS), i1 = b - Math.trunc(0.25 * FS);
-    if (i1 - i0 < Math.trunc(0.4 * FS)) continue;
-    const midRough = median(Array.from(F.rough.subarray(i0, i1)).map(v => Number.isFinite(v) ? v : NaN));
-    const ref = median(F.roughRef.subarray(i0, i1)), level = median(F.m1.subarray(i0, i1));
-    if (nanmax(F.m4.subarray(i0, i1)) >= p.pairMidMaxPeakG || level > p.pairMidMaxLevelG || midRough > p.pairMidMaxRoughRatio * ref) continue;
-    let vf = 0; for (let i = a; i < b; i++) vf += s.valid[i]; if (vf / (b - a) < p.minValidFrac) continue;
     const tTo = F.t[a];
     const j0 = Math.max(a + 1, b - Math.trunc(0.3 * FS)), j1 = Math.min(n, b + Math.trunc(0.3 * FS));
     let iRaw = j0, mm = -Infinity; for (let i = j0; i < j1; i++) if (F.magF[i] > mm) { mm = F.magF[i]; iRaw = i; }
@@ -341,10 +351,11 @@ function impulsePairs(s, F, p, existing) {
 }
 
 // ------------------------------------------------------------------ height
-export const DEFAULT_HEIGHT = { preWin: [-14, -1.5], postWin: [3, 16], tempC: 15, aEff: 2.0, lagRange: [-0.2, 1.2], aGrid: [1.0, 9.8, 36],
+export const DEFAULT_HEIGHT = { preWin: [-14, -1.5], postWin: [3, 16], tempC: 15, aEff: 1.39, airtimeOffsetS: 1.25, lagRange: [-0.2, 1.2], aGrid: [1.0, 9.8, 36],
   minFitSamples: 2, splashJumpPa: 60, splashStepPa: 40, fitRmseAbsM: 0.6, fitRmseRel: 0.12, quadRmseMaxM: 1.5 };
 
-export function heightFromAirtime(T, aEff = 2.0) { return aEff * T * T / 8; }
+// h = aEff (T + offset)^2 / 8: T + 1.25 s is a Surfr-equivalent airtime; aEff 1.39 fitted on 56 Surfr-matched jumps
+export function heightFromAirtime(T, aEff = 1.39, offset = 1.25) { return aEff * (T + offset) ** 2 / 8; }
 export function ballisticHeight(T) { return G * T * T / 8; }
 function robustLevel(p) {
   p = p.filter(Number.isFinite);
@@ -360,7 +371,7 @@ export function jumpModel(T, aUp, aDn) {
 
 export function estimateHeight(tTo, tLand, pressT, press, prm = DEFAULT_HEIGHT) {
   const T = tLand - tTo;
-  const r = { hMaxSample: NaN, hQuad: NaN, hFit: NaN, hAirtime: heightFromAirtime(T, prm.aEff), hBallistic: ballisticHeight(T), best: NaN, method: '',
+  const r = { hMaxSample: NaN, hQuad: NaN, hFit: NaN, hAirtime: heightFromAirtime(T, prm.aEff, prm.airtimeOffsetS ?? 1.25), hBallistic: ballisticHeight(T), best: NaN, method: '',
     nFlightSamples: 0, hFlightStd: NaN, splashed: false, fitRmseM: NaN, fitAUp: NaN, fitADn: NaN, fitLagS: NaN, baselinePrePa: NaN, baselinePostPa: NaN, baselineOk: false, baroOk: false, flag: '', samples: [] };
   const pre = [], post = [];
   for (let i = 0; i < pressT.length; i++) {

@@ -73,13 +73,14 @@ class DetectParams:
     pair_impact_g: float = 2.5
     pair_min_s: float = 1.0
     pair_max_s: float = 7.0
-    pair_mid_max_peak_g: float = 2.4
-    pair_mid_max_level_g: float = 1.15
-    pair_mid_max_rough_ratio: float = 1.45
+    pair_mid_max_peak_g: float = 2.6     # Nov 2026 re-tune on 70 Surfr-timed jumps (sessions 5, 8, 9), leave-one-session-out:
+    pair_mid_max_level_g: float = 1.15    # the wrist is often as rough in the air as on the water (session 9),
+    pair_mid_max_rough_ratio: float = 2.2 # so roughness only rejects clearly-riding stretches
     pair_min_speed_mps: float = 4.2     # 15 km/h at the pop
     max_air_speed_gain_mps: float = 2.0  # GPS speed in the air may not rise > 2 m/s (7.2 km/h) above take-off:
                                          # the 20 Surfr-confirmed jumps gained <= 0.76 m/s, riding off after a slow
                                          # turn (false 11.4 m "jump", 2026-11-05) gained 2.6 m/s; 1.0 cost simulated recall
+    pair_prepop_s: float = 2.0          # a pair shorter than this whose impact starts a jump of its own is a pre-pop bump
     pair_long_s: float = 4.8            # a pair longer than this needs a strong pop: in session 5 every real
     pair_long_min_pop_g: float = 2.6    # long jump popped at >= 3.0 g, the two false ones (chop slams) at 2.3 g
     baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
@@ -426,26 +427,40 @@ def _impulse_pairs(s, F, p, existing):
     pk, _ = signal.find_peaks(F.m4, height=min(p.pair_pop_g, p.pair_impact_g), distance=6)
     pops = [a for a in pk if F.m4[a] >= p.pair_pop_g]
     impacts = [b for b in pk if F.m4[b] >= p.pair_impact_g]
+
+    def shape(a):
+        """(impact index, level, mid roughness, riding roughness) if a starts a jump-shaped pair, else None."""
+        lo, hi = a + int(p.pair_min_s * FS), min(n, a + int(p.pair_max_s * FS))
+        nxt = [b for b in impacts if lo <= b < hi]
+        if not nxt:
+            return None
+        b = int(nxt[0])
+        i0, i1 = a + int(0.3 * FS), b - int(0.25 * FS)
+        if i1 - i0 < int(0.4 * FS):
+            return None
+        mid_rough = float(np.nanmedian(np.where(np.isinf(F.rough[i0:i1]), np.nan, F.rough[i0:i1])))
+        ref = float(np.nanmedian(F.rough_ref[i0:i1]))
+        level = float(np.nanmedian(F.m1[i0:i1]))
+        if np.nanmax(F.m4[i0:i1]) >= p.pair_mid_max_peak_g or level > p.pair_mid_max_level_g or mid_rough > p.pair_mid_max_rough_ratio * ref:
+            return None
+        if s.valid[a:b].mean() < p.min_valid_frac:
+            return None
+        return b, level, mid_rough, ref
+
     out = []
     taken_until = -np.inf
     for a in pops:
         if F.t[a] < taken_until:
             continue
-        lo, hi = a + int(p.pair_min_s * FS), min(n, a + int(p.pair_max_s * FS))
-        nxt = [b for b in impacts if lo <= b < hi]
-        if not nxt:
+        sh = shape(a)
+        if sh is None:
             continue
-        b = int(nxt[0])
+        b, level, mid_rough, ref = sh
+        # a bump just before the real pop pairs with the pop itself as its "impact" (session 5, jump 2):
+        # if the impact starts a jump-shaped pair of its own, skip this short one
+        if (b - a) / FS < p.pair_prepop_s and F.m4[b] >= p.pair_pop_g and shape(b) is not None:
+            continue
         i0, i1 = a + int(0.3 * FS), b - int(0.25 * FS)
-        if i1 - i0 < int(0.4 * FS):
-            continue
-        mid_rough = float(np.nanmedian(np.where(np.isinf(F.rough[i0:i1]), np.nan, F.rough[i0:i1])))
-        ref = float(np.nanmedian(F.rough_ref[i0:i1]))
-        level = float(np.nanmedian(F.m1[i0:i1]))
-        if np.nanmax(F.m4[i0:i1]) >= p.pair_mid_max_peak_g or level > p.pair_mid_max_level_g or mid_rough > p.pair_mid_max_rough_ratio * ref:
-            continue
-        if s.valid[a:b].mean() < p.min_valid_frac:
-            continue
         t_to = F.t[a]
         j0, j1 = max(a + 1, b - int(0.3 * FS)), min(n, b + int(0.3 * FS))
         i_raw = j0 + int(np.nanargmax(F.mag_f[j0:j1]))

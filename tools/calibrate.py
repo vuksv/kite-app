@@ -79,5 +79,5 @@ if "height" in ref and m.ref_h.notna().any():
     T = mm.kl_air.astype(float).to_numpy(); h = mm.ref_h.astype(float).to_numpy()
     a_eff = 8 * np.sum(h * T ** 2) / np.sum(T ** 4)
     pred = a_eff * T ** 2 / 8
-    print(f"height: best a_eff = {a_eff:.2f} m/s^2 (currently 2.5); residual MAE {np.abs(pred - h).mean():.2f} m over {len(h)} jumps")
+    print(f"height: best a_eff = {a_eff:.2f} m/s^2 (the pipeline now uses 1.39 on T + 1.25 s); residual MAE {np.abs(pred - h).mean():.2f} m over {len(h)} jumps")
     print("   -> set 'Airtime-model a_eff' in the web settings to that value, or analyze.py --a-eff")

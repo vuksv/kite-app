@@ -1,5 +1,19 @@
 [
  {
+  "file": "2026-11-06_brazil-9.fit",
+  "start_utc": "2026-11-06T20:02:45+00:00",
+  "records": 2493,
+  "label": "brazil 9",
+  "note": "with Surfr phone reference"
+ },
+ {
+  "file": "2026-11-06_brazil-8.fit",
+  "start_utc": "2026-11-06T16:49:24+00:00",
+  "records": 6992,
+  "label": "brazil 8",
+  "note": "with Surfr phone reference"
+ },
+ {
   "file": "2026-11-05_brazil-7.fit",
   "start_utc": "2026-11-05T20:02:47+00:00",
   "records": 3024,

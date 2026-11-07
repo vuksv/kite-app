@@ -60,6 +60,13 @@ a ride (S5).
 totals, a row per session, every jump on one chart, and the best jumps. Sessions added with
 `tools/add_session.py` show up there automatically.
 
+## Calibration against Surfr
+
+Sessions recorded with the Surfr phone app in parallel keep its jump list next to the FIT
+(`sessions/*_surfr.csv`). `python tools/surfr_compare.py sessions/X.fit sessions/X_surfr.csv`
+aligns the two and reports recall, precision and height/airtime error. Current accuracy and the
+calibration history are in `docs/ANALYSIS.md`.
+
 ## GoPro cross-check
 
 <https://vuksv.github.io/kite-app/gopro.html> reads the telemetry inside original GoPro clips

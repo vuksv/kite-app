@@ -98,7 +98,15 @@ class JumpModel:
         return cls(v0=v0, a_up=a_up, a_dn=a_dn)
 
 
-def height_from_airtime(airtime: float, a_eff: float = 2.0) -> float:
+def height_from_airtime(airtime: float, a_eff: float = 1.39, offset_s: float = 1.25) -> float:
+    """h = a_eff (T + offset)^2 / 8.  KiteLog's pop-to-impact airtime T is ~1.25 s shorter than the
+    Surfr phone app's on the same jumps (1.14-1.31 s on three days), so T + offset is a
+    Surfr-equivalent airtime; a_eff = 1.39 m/s^2 is the least-squares fit on 56 Surfr-matched jumps
+    (leave-one-session-out MAE 0.74 m, 17 %)."""
+    return a_eff * (airtime + offset_s) ** 2 / 8.0
+
+
+def _height_from_airtime_v1(airtime: float, a_eff: float = 2.0) -> float:
     """Symmetric-model fallback h = a_eff T^2 / 8.  a_eff ~ 3.2 m/s^2 reproduces
     the 28.6 m / 8.5 s reference jump; calibrate per rider from baro-validated jumps."""
     return a_eff * airtime ** 2 / 8.0

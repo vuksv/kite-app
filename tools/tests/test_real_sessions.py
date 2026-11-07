@@ -56,3 +56,20 @@ def test_no_riding_off_jump():
     """Session 7 had an 11.4 m / 6.75 s 'jump' that was a slam plus riding off (speed +9 km/h in the air)."""
     _, acc = _jumps("2026-11-05_brazil-7.fit")
     assert acc.airtime_s.max() < 6.5 and acc.height_m.max() < 10.0
+
+
+@pytest.mark.parametrize("name,min_found,max_extra,max_h_mae", [
+    ("2026-11-06_brazil-8", 18, 3, 1.0),     # 25 exact-time Surfr jumps
+    ("2026-11-06_brazil-9", 13, 4, 1.7),     # 18 exact-time Surfr jumps, overpowered day
+    ("2026-11-04_brazil-5", 19, 5, 1.0),     # 27 exact-time Surfr jumps
+])
+def test_against_surfr(name, min_found, max_extra, max_h_mae):
+    """Detection and height vs the Surfr phone app (sessions/*_surfr.csv), via tools/surfr_compare.py."""
+    import surfr_compare as SC
+    fit = os.path.join(SESS, name + ".fit"); ref = os.path.join(SESS, name + "_surfr.csv")
+    if not (os.path.exists(fit) and os.path.exists(ref)):
+        pytest.skip("reference missing")
+    sm = SC.summary(SC.compare(fit, ref))
+    assert sm["found"] >= min_found, sm
+    assert sm["extra"] <= max_extra, sm
+    assert sm["h_mae"] <= max_h_mae, sm

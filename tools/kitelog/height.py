@@ -9,7 +9,7 @@ Estimators (all returned, `best` picks one):
   h_quad       : parabola through the three samples around the max
   h_fit        : physics fit of JumpModel(a_up, a_dn, lag) to the samples with the
                  airtime fixed by the accelerometer -> apex of the fitted curve
-  h_airtime    : a_eff * T^2 / 8 fallback (no barometer needed)
+  h_airtime    : a_eff * (T + 1.25 s)^2 / 8 fallback (no barometer needed)
 """
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ class HeightParams:
     pre_win: tuple = (-14.0, -1.5)     # seconds relative to t_to for the baseline window
     post_win: tuple = (3.0, 16.0)      # seconds relative to t_land
     temp_c: float = 15.0
-    a_eff: float = 2.0                 # fitted on 22 jumps vs the Surfr phone app (session 5): MAE 0.63 m
+    a_eff: float = 1.39                # h = a_eff (T + airtime_offset_s)^2 / 8, fitted on 56 Surfr-matched jumps
+    airtime_offset_s: float = 1.25     # (sessions 5, 8, 9; leave-one-session-out MAE 0.74 m)
     lag_range: tuple = (-0.2, 1.2)     # unknown latency of the 1 Hz pressure read (s)
     a_grid: tuple = (1.0, 9.8, 36)
     min_fit_samples: int = 2
@@ -73,7 +74,7 @@ def estimate_height(t_to: float, t_land: float, press_t: np.ndarray, press: np.n
                     prm: HeightParams | None = None) -> HeightResult:
     prm = prm or HeightParams()
     T = t_land - t_to
-    r = HeightResult(h_airtime=height_from_airtime(T, prm.a_eff), h_ballistic=ballistic_height(T))
+    r = HeightResult(h_airtime=height_from_airtime(T, prm.a_eff, prm.airtime_offset_s), h_ballistic=ballistic_height(T))
     pre = press[(press_t >= t_to + prm.pre_win[0]) & (press_t <= t_to + prm.pre_win[1])]
     post = press[(press_t >= t_land + prm.post_win[0]) & (press_t <= t_land + prm.post_win[1])]
     p_pre, p_post = _robust_level(pre), _robust_level(post)

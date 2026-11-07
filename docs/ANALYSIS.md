@@ -156,6 +156,27 @@ Keep the FIT files: every tuning change can be replayed over all sessions with
   gain more than 2 m/s (7.2 km/h) over its take-off speed (rule `speed_gain`). Session 6 only
   overlaps the last 16 min of that day's Surfr recording (Surfr 9 jumps there, KiteLog 6;
   Surfr times are minute-rounded with an unknown start second, so no per-jump check).
+* **Sessions 8 and 9 (Nov 6) – second calibration, 70 Surfr-timed jumps over sessions 5, 8, 9.**
+  `tools/surfr_compare.py <fit> <surfr.csv>` finds Surfr's start by requiring the full jump
+  pattern (pop 1–3 s before Surfr's stamp *and* impact after it; matching single impulses put
+  session 8 2.5 s off) and reports recall, extras and height/airtime errors.
+  Out of the box the detector found only 56 % and 44 % of sessions 8/9's jumps: the wrist is
+  often as rough in the air as on the water. Thresholds were re-tuned by a leave-one-session-out
+  grid search (pair roughness limit 1.45× → 2.2× riding, in-air bumps < 2.6 g; in-air level kept
+  at 1.15 g because 1.2 g gave 21 false jumps/h in simulated rough water). A "pre-pop bump" rule
+  stops a small bump just before the pop from pairing with the pop itself.
+  Heights: KiteLog's pop-to-impact airtime is 1.14–1.31 s shorter than Surfr's on every day, so
+  h = 1.39 · (T + 1.25 s)² / 8 (fitted on 56 matched jumps).
+
+  | vs Surfr | recall | precision | height MAE |
+  |---|---|---|---|
+  | cross-validated (settings tuned without the tested session) | 77 % | 78 % | 0.74 m (17 %) |
+  | final settings, session 5 | 21/27 (78 %) | 88 % | 0.63 m (18 %) |
+  | final settings, session 8 | 19/25 (76 %) | 95 % | 0.47 m (10 %) |
+  | final settings, session 9 | 14/18 (78 %) | 82 % | 0.97 m (19 %) |
+
+  KiteLog's airtime column stays the measured pop-to-impact time (~1.25 s below Surfr's).
+  `tools/tests/test_real_sessions.py` checks all three against their Surfr lists.
 * The barometer is useless on the water as worn: steps of hundreds of Pa (water on the
   port) and no visible rise even on that clean jump. Heights therefore come from the airtime
   model (`a_eff`, to be calibrated against video/WOO); the barometer veto is off by default.
