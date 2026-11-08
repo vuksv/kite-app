@@ -25,8 +25,8 @@ class HeightParams:
     pre_win: tuple = (-14.0, -1.5)     # seconds relative to t_to for the baseline window
     post_win: tuple = (3.0, 16.0)      # seconds relative to t_land
     temp_c: float = 15.0
-    a_eff: float = 1.39                # h = a_eff (T + airtime_offset_s)^2 / 8, fitted on 56 Surfr-matched jumps
-    airtime_offset_s: float = 1.25     # (sessions 5, 8, 9; leave-one-session-out MAE 0.74 m)
+    a_eff: float = 1.43                # h = a_eff (T + airtime_offset_s)^2 / 8, fitted on 59 exact-time Surfr jumps
+    airtime_offset_s: float = 1.25     # (sessions 5, 8, 9, 10; leave-one-session-out MAE 0.83 m, 20 %)
     lag_range: tuple = (-0.2, 1.2)     # unknown latency of the 1 Hz pressure read (s)
     a_grid: tuple = (1.0, 9.8, 36)
     min_fit_samples: int = 2

@@ -59,9 +59,10 @@ def test_no_riding_off_jump():
 
 
 @pytest.mark.parametrize("name,min_found,max_extra,max_h_mae", [
-    ("2026-11-06_brazil-8", 18, 3, 1.0),     # 25 exact-time Surfr jumps
+    ("2026-11-06_brazil-8", 17, 3, 1.0),     # 25 exact-time Surfr jumps
     ("2026-11-06_brazil-9", 13, 4, 1.7),     # 18 exact-time Surfr jumps, overpowered day
-    ("2026-11-04_brazil-5", 19, 5, 1.0),     # 27 exact-time Surfr jumps
+    ("2026-11-04_brazil-5", 18, 5, 1.0),     # 27 exact-time Surfr jumps
+    ("2026-11-07_brazil-10", 4, 8, 1.0),     # 8 exact-time Surfr jumps, calm day
 ])
 def test_against_surfr(name, min_found, max_extra, max_h_mae):
     """Detection and height vs the Surfr phone app (sessions/*_surfr.csv), via tools/surfr_compare.py."""
@@ -73,3 +74,17 @@ def test_against_surfr(name, min_found, max_extra, max_h_mae):
     assert sm["found"] >= min_found, sm
     assert sm["extra"] <= max_extra, sm
     assert sm["h_mae"] <= max_h_mae, sm
+
+
+@pytest.mark.parametrize("name,min_recall,min_precision", [
+    ("2026-11-04_brazil-5", 0.65, 0.70), ("2026-11-06_brazil-8", 0.68, 0.88),
+    ("2026-11-06_brazil-9", 0.75, 0.75), ("2026-11-07_brazil-10", 0.68, 0.60),
+])
+def test_whole_session_against_surfr(name, min_recall, min_precision):
+    """Exact and minute-rounded Surfr jumps over the whole session (Nov 2026: 75 % recall, 80 % precision pooled)."""
+    import surfr_compare as SC
+    fit = os.path.join(SESS, name + ".fit"); ref = os.path.join(SESS, name + "_surfr.csv")
+    if not (os.path.exists(fit) and os.path.exists(ref)):
+        pytest.skip("reference missing")
+    w = SC.whole_session(fit, ref)
+    assert w["recall"] >= min_recall and w["precision"] >= min_precision, {k: w[k] for k in ("found", "n_ref", "n_kitelog")}

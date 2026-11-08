@@ -176,9 +176,10 @@ export const DEFAULT_DETECT = {
   bridgeRoughRatio: 1.0,
   maxLevelWithoutPopG: 0.95, popPeakG: 2.0,
   // impulse-pair generator, re-tuned on session 5 against 27 Surfr-phone jumps (see tools/kitelog/detect.py)
-  pairPopG: 2.2, pairImpactG: 2.5, pairMinS: 1.0, pairMaxS: 7.0, pairMidMaxPeakG: 2.6, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 2.2, pairMinSpeedMps: 4.2,
+  pairPopG: 2.4, pairImpactG: 2.3, pairMinS: 1.5, pairMaxS: 7.0, pairMidMaxPeakG: 2.6, pairMidMaxLevelG: 1.15, pairMidMaxRoughRatio: 2.2, pairMinSpeedMps: 5.6,
+  useSmoothGenerator: false,                     // the original "vibration stops" detector (1 confirmed vs 10 false jumps on 4 Surfr days)
   pairPrepopS: 2.0,                              // a pair this short whose impact starts a jump of its own is a pre-pop bump
-  pairLongS: 4.8, pairLongMinPopG: 2.6,
+  pairLongS: 4.8, pairLongMinPopG: 3.2,
   maxAirSpeedGainMps: 2.0,                       // GPS speed in the air may not rise > 2 m/s above take-off (riding off is not a jump)          // a pair longer than 4.8 s needs a pop >= 2.6 g (session 5: false long pairs popped at 2.3 g)      // "kite support": level < 0.95 g, or a pop >= 2 g (transitions show ~1.1 g + 1.5 g bump)
   baroGate: false,                               // barometer veto off: the port gets wet on the water (see docs/ANALYSIS.md)
 };
@@ -270,6 +271,7 @@ export function detectJumps(s, p = DEFAULT_DETECT, F = null) {
     if (takeoffInGap && landingInGap) reasons.push('both_transients_in_gap');
     if (flightLevel >= p.maxLevelWithoutPopG && !(pkTo >= p.popPeakG)) reasons.push('no_kite_support');
     if (p.minRoughRefG > 0 && median(F.roughRef.subarray(a, b)) < p.minRoughRefG) reasons.push('no_vibration_context');
+    if (p.useSmoothGenerator === false) reasons.push('smooth_detector_off');
     if (p.takeoffMinJerkG > 0 && !takeoffInGap && jerkTo < p.takeoffMinJerkG) reasons.push('no_takeoff_jerk');
     if (p.landingMinJerkG > 0 && !landingInGap && jerkLand < p.landingMinJerkG) reasons.push('no_landing_jerk');
     if (Number.isFinite(spd) && spd < p.minSpeedMps) reasons.push('slow');
@@ -351,11 +353,11 @@ function impulsePairs(s, F, p, existing) {
 }
 
 // ------------------------------------------------------------------ height
-export const DEFAULT_HEIGHT = { preWin: [-14, -1.5], postWin: [3, 16], tempC: 15, aEff: 1.39, airtimeOffsetS: 1.25, lagRange: [-0.2, 1.2], aGrid: [1.0, 9.8, 36],
+export const DEFAULT_HEIGHT = { preWin: [-14, -1.5], postWin: [3, 16], tempC: 15, aEff: 1.43, airtimeOffsetS: 1.25, lagRange: [-0.2, 1.2], aGrid: [1.0, 9.8, 36],
   minFitSamples: 2, splashJumpPa: 60, splashStepPa: 40, fitRmseAbsM: 0.6, fitRmseRel: 0.12, quadRmseMaxM: 1.5 };
 
-// h = aEff (T + offset)^2 / 8: T + 1.25 s is a Surfr-equivalent airtime; aEff 1.39 fitted on 56 Surfr-matched jumps
-export function heightFromAirtime(T, aEff = 1.39, offset = 1.25) { return aEff * (T + offset) ** 2 / 8; }
+// h = aEff (T + offset)^2 / 8: T + 1.25 s is a Surfr-equivalent airtime; aEff 1.43 fitted on 59 exact-time Surfr jumps (4 days)
+export function heightFromAirtime(T, aEff = 1.43, offset = 1.25) { return aEff * (T + offset) ** 2 / 8; }
 export function ballisticHeight(T) { return G * T * T / 8; }
 function robustLevel(p) {
   p = p.filter(Number.isFinite);

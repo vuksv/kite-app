@@ -69,20 +69,22 @@ class DetectParams:
     # Re-tuned on session 5 against 27 Surfr-phone jumps (and still covering session 1):
     # pops 2.25-3.8 g, impacts 2.7-4.9 g, 2.6-5.1 s apart, flight level 0.86-1.19 g,
     # largest bump in the air <= 2.32 g, roughness in the air <= 1.4 x riding.
-    pair_pop_g: float = 2.2
-    pair_impact_g: float = 2.5
-    pair_min_s: float = 1.0
+    pair_pop_g: float = 2.4
+    pair_impact_g: float = 2.3
+    pair_min_s: float = 1.5
     pair_max_s: float = 7.0
     pair_mid_max_peak_g: float = 2.6     # Nov 2026 re-tune on 70 Surfr-timed jumps (sessions 5, 8, 9), leave-one-session-out:
     pair_mid_max_level_g: float = 1.15    # the wrist is often as rough in the air as on the water (session 9),
     pair_mid_max_rough_ratio: float = 2.2 # so roughness only rejects clearly-riding stretches
-    pair_min_speed_mps: float = 4.2     # 15 km/h at the pop
+    pair_min_speed_mps: float = 5.6     # 20 km/h at the pop
     max_air_speed_gain_mps: float = 2.0  # GPS speed in the air may not rise > 2 m/s (7.2 km/h) above take-off:
                                          # the 20 Surfr-confirmed jumps gained <= 0.76 m/s, riding off after a slow
                                          # turn (false 11.4 m "jump", 2026-11-05) gained 2.6 m/s; 1.0 cost simulated recall
+    use_smooth_generator: bool = False  # the original "vibration stops" detector: on 4 Surfr days 1 confirmed jump vs 10 false ones
     pair_prepop_s: float = 2.0          # a pair shorter than this whose impact starts a jump of its own is a pre-pop bump
     pair_long_s: float = 4.8            # a pair longer than this needs a strong pop: in session 5 every real
-    pair_long_min_pop_g: float = 2.6    # long jump popped at >= 3.0 g, the two false ones (chop slams) at 2.3 g
+    pair_long_min_pop_g: float = 3.2    # long jump popped at >= 3.0 g, the two false ones (chop slams) at 2.3 g;
+                                        # 4 Surfr days: all 4 confirmed > 4.8 s popped >= 3.43 g, 7 of 8 false ones <= 2.94 g
     baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
                                      # first real session showed no baro rise even on a clean 3 s jump
 
@@ -401,6 +403,8 @@ def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | No
             reasons.append("gap_inside")           # a bridged gap looks perfectly smooth - not evidence of flight
         elif vf < 1.0:
             flags.append("gap_in_flight")
+        if not p.use_smooth_generator:
+            reasons.append("smooth_detector_off")
         c.flags = ",".join(flags)
         if not np.isnan(spd) and spd < p.min_speed_mps:
             reasons.append("slow")

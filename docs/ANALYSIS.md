@@ -177,6 +177,32 @@ Keep the FIT files: every tuning change can be replayed over all sessions with
 
   KiteLog's airtime column stays the measured pop-to-impact time (~1.25 s below Surfr's).
   `tools/tests/test_real_sessions.py` checks all three against their Surfr lists.
+* **Session 10 (Nov 7) – third calibration, 4 Surfr days, 154 jumps.** A calm day (Surfr's best
+  5.2 m) on which the Nov 6 settings over-detected (52 KiteLog vs 37 Surfr). `surfr_compare.py`
+  now also scores **whole sessions**: minute-rounded Surfr jumps match any KiteLog jump in that
+  minute, so every Surfr jump counts, not only the first hour's. Findings and changes:
+  - the original "vibration stops" detector gave 1 confirmed vs 10 false jumps → switched off
+    (`use_smooth_generator`; its candidates still show under *rejected*);
+  - every confirmed jump with > 4.8 s pop-to-impact popped at ≥ 3.43 g, 7 of 8 false long ones
+    at ≤ 2.94 g (riding through chop, one crash) → long flights need a 3.2 g pop;
+  - pair thresholds re-searched leave-one-session-out on whole sessions: pop ≥ 2.4 g,
+    impact ≥ 2.3 g, ≥ 1.5 s, ≥ 20 km/h at the pop; in-air level 1.15 g, roughness 2.2×;
+  - a learned score over the same features did not beat the rules (CV F1 0.70 vs 0.73) – dropped;
+  - a crash rule (no speed after landing) was rejected: 18 confirmed jumped transitions land
+    at ≤ 8 km/h;
+  - heights: a_eff 1.43 on T + 1.25 s (59 exact-time pairs, leave-one-session-out MAE 0.83 m, 20 %);
+  - the simulator now flies with the measured wrist signature (≈1 g, riding-level vibration in the
+    air), which makes it pessimistic (21–60 % recall); real Surfr sessions are the reference.
+
+  | vs Surfr, final settings | exact-time recall | whole-session recall | whole-session precision | height MAE (exact) |
+  |---|---|---|---|---|
+  | session 5 | 22/27 | 37/52 (71 %) | 77 % | 0.75 m |
+  | session 8 | 17/25 | 35/47 (74 %) | 95 % | 0.63 m |
+  | session 9 | 15/18 | 15/18 (83 %) | 83 % | 0.91 m |
+  | session 10 | 5/8 | 28/37 (76 %) | 68 % | 0.58 m |
+  | **all** | 59/78 (76 %) | **115/154 (75 %)** | **80 %** | 0.71 m |
+
+  Cross-validated whole-session estimate before the long-pop rule: 72 % recall, 68 % precision.
 * The barometer is useless on the water as worn: steps of hundreds of Pa (water on the
   port) and no visible rise even on that clean jump. Heights therefore come from the airtime
   model (`a_eff`, to be calibrated against video/WOO); the barometer veto is off by default.

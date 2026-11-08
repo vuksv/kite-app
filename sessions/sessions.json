@@ -1,5 +1,12 @@
 [
  {
+  "file": "2026-11-07_brazil-10.fit",
+  "start_utc": "2026-11-07T15:55:48+00:00",
+  "records": 10607,
+  "label": "brazil 10",
+  "note": "with Surfr phone reference"
+ },
+ {
   "file": "2026-11-06_brazil-9.fit",
   "start_utc": "2026-11-06T20:02:45+00:00",
   "records": 2493,

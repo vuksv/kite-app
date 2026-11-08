@@ -126,6 +126,7 @@ class SessionSim:
         self.vib = np.zeros(self.n)          # vibration RMS schedule (g)
         self.jumps: list[JumpTruth] = []
         self._jump_spans: list[tuple[int, int]] = []
+        self.kite_h = np.zeros(self.n)       # horizontal kite pull in the air (m/s^2), along the heading
         self.tack_count = 0
 
     # ------------------------------------------------------------------ timeline
@@ -238,13 +239,20 @@ class SessionSim:
         self.phase[i_load:i_to] = PH_LOAD
         self.phase[i_to:i_ramp_end] = PH_FLIGHT
         self.vib[i_load:i_to] *= 0.7
-        self.vib[i_to:i_ramp_end] = 0.012
+        # Measured on real sessions (Nov 2026, 70 Surfr-timed jumps): in the air the wrist keeps
+        # 0.5-1.2x the riding vibration and reads |f| ~0.9-1.15 g (the kite's pull, not free fall)
+        air_vib = float(np.median(self.vib[max(0, i_load - FS_PHYS):i_load])) * rng.uniform(0.5, 1.2)
+        self.vib[i_to:i_ramp_end] = air_vib
         # --- flight (after the pulse): piecewise constant net acceleration
         tau = (np.arange(n_fl)) / FS_PHYS
         blend = 1.0 / (1.0 + np.exp(-(tau - jm.t_up) / 0.12))      # symmetric sigmoid, +-0.3 s
         self.a_z[i_ramp_end:i_land] = -a_up * (1 - blend) - a_dn * blend
         self.phase[i_ramp_end:i_land] = PH_FLIGHT
-        self.vib[i_ramp_end:i_land] = 0.012
+        self.vib[i_ramp_end:i_land] = air_vib
+        # horizontal kite pull that brings |f| to the measured in-air level
+        level = rng.uniform(0.92, 1.12)
+        fz = (self.a_z[i_to:i_land] + G) / G
+        self.kite_h[i_to:i_land] = G * np.sqrt(np.clip(level ** 2 - fz ** 2, 0, None))
         v_to = float(self.v_h[i_to])
         loss = rng.uniform(0.15, 0.40)
         n_air = i_land - i_to
@@ -293,8 +301,8 @@ class SessionSim:
         # horizontal acceleration in world frame from speed/heading changes
         vx = self.v_h * np.sin(self.psi)
         vy = self.v_h * np.cos(self.psi)
-        ax = np.gradient(vx, dt)
-        ay = np.gradient(vy, dt)
+        ax = np.gradient(vx, dt) + self.kite_h * np.sin(self.psi)
+        ay = np.gradient(vy, dt) + self.kite_h * np.cos(self.psi)
         # specific force = a - g_vec, with g_vec = (0,0,-g): f_z = a_z + g
         f_world = np.stack([ax, ay, self.a_z + G], axis=1) / G
         # watch orientation: slow wobble of the arm, larger during transitions

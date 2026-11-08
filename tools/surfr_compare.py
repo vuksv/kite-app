@@ -95,6 +95,43 @@ def compare(fit_path, ref_path, prm=None, hprm=None, offset=None):
                 n_late_kitelog=len(late), n_ref_total=len(ref), n_kitelog_total=len(acc), jumps=acc)
 
 
+def match_all(acc_ts: np.ndarray, ref: pd.DataFrame, offset: float, lo: float, hi: float):
+    """Whole-session matching.  Each Surfr jump gets a window for the KiteLog take-off: exact times
+    +-MATCH_TOL_S around stamp - POP_TO_SURFR_S; minute-rounded times anywhere in that minute
+    (+-MATCH_TOL_S).  Exact jumps are matched first (nearest), then minute ones in time order.
+    Returns (pairs [(ref row index, kitelog index)], n_ref_in_overlap, n_kitelog_in_overlap)."""
+    ref = ref.copy()
+    ref["c"] = offset + ref.t_since_surfr_start_s - POP_TO_SURFR_S
+    ref["w0"] = np.where(ref.time_precision_s == 1, ref.c - MATCH_TOL_S, ref.c - MATCH_TOL_S)
+    ref["w1"] = np.where(ref.time_precision_s == 1, ref.c + MATCH_TOL_S, ref.c + 60 + MATCH_TOL_S)
+    ref = ref[(ref.c > lo + 3) & (ref.c < hi - 3)]
+    k_in = np.flatnonzero((acc_ts >= lo) & (acc_ts <= hi))
+    used, pairs = set(), []
+    for _, r in ref[ref.time_precision_s == 1].iterrows():
+        cand = [k for k in k_in if k not in used and r.w0 <= acc_ts[k] <= r.w1]
+        if cand:
+            k = min(cand, key=lambda k: abs(acc_ts[k] - r.c)); used.add(k); pairs.append((r.name, k))
+    for _, r in ref[ref.time_precision_s != 1].sort_values("c").iterrows():
+        cand = [k for k in k_in if k not in used and r.w0 <= acc_ts[k] <= r.w1]
+        if cand:
+            k = min(cand, key=lambda k: acc_ts[k]); used.add(k); pairs.append((r.name, k))
+    return pairs, len(ref), len(k_in)
+
+
+def whole_session(fit_path, ref_path, prm=None, hprm=None, offset=None):
+    """Recall/precision over the whole overlap (exact + minute-rounded Surfr jumps)."""
+    rec, s, F, j = load(fit_path, prm, hprm)
+    ref = pd.read_csv(ref_path, comment="#")
+    if offset is None:
+        offset, _ = find_offset(s, F, ref)
+    acc = j[j.accepted].reset_index(drop=True)
+    lo, hi = F.t[0] * s.ts_slope + s.ts_offset, F.t[-1] * s.ts_slope + s.ts_offset
+    pairs, n_ref, n_k = match_all(acc.ts_to.to_numpy(float), ref, offset, lo, hi)
+    tp = len(pairs)
+    return dict(found=tp, n_ref=n_ref, n_kitelog=n_k, recall=tp / max(1, n_ref), precision=tp / max(1, n_k),
+                pairs=[(ref.loc[i], acc.loc[k]) for i, k in pairs])
+
+
 def summary(r) -> dict:
     M = r["matches"]; m = M[M.found]
     out = dict(exact=r["n_exact"], found=len(m), recall=len(m) / max(1, r["n_exact"]), extra=len(r["extra"]),
@@ -117,6 +154,9 @@ if __name__ == "__main__":
     print(f"Surfr start {pd.to_datetime(r['offset'], unit='s'):%H:%M:%S} UTC")
     print(f"exact-time Surfr jumps {sm['exact']}: found {sm['found']} ({sm['recall']*100:.0f} %), KiteLog extras {sm['extra']} "
           f"(precision {sm['precision']*100:.0f} %); whole overlap: Surfr {sm['total_ref']} vs KiteLog {sm['total_kitelog']}")
+    w = whole_session(a.fit, a.surfr, offset=r["offset"])
+    print(f"whole session (exact + minute-rounded Surfr times): found {w['found']}/{w['n_ref']} ({w['recall']*100:.0f} %), "
+          f"precision {w['precision']*100:.0f} % ({w['n_kitelog']} KiteLog jumps)")
     if "h_mae" in sm:
         print(f"height vs Surfr: MAE {sm['h_mae']:.2f} m ({sm['h_mape']:.0f} %), bias {sm['h_bias']:+.2f} m, corr {sm['h_corr']:.2f}; "
               f"airtime KiteLog - Surfr {sm['air_bias']:+.2f} s (MAE {sm['air_mae']:.2f} s)")

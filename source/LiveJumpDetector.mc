@@ -50,7 +50,7 @@ class LiveJumpDetector {
                 lastAirtime = smoothRun * samplePeriod;
                 if (lastAirtime > maxAirtime) { maxAirtime = lastAirtime; }
                 jumps += 1;
-                recorder.onJump(lastAirtime, 0.174 * (lastAirtime + 1.25) * (lastAirtime + 1.25));   // h = 1.39 (T + 1.25)^2 / 8 (Surfr-calibrated)
+                recorder.onJump(lastAirtime, 0.179 * (lastAirtime + 1.25) * (lastAirtime + 1.25));   // h = 1.43 (T + 1.25)^2 / 8 (Surfr-calibrated)
                 inCandidate = false;
                 smoothRun = 0;
                 continue;
