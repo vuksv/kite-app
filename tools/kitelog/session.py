@@ -84,7 +84,7 @@ def jumps_table(s: Streams, cands: list[JumpCandidate], heights: list[HeightResu
             dist_speed_m=d["dist_speed"], dist_pos_m=d["dist_pos"],
             takeoff_speed_kmh=d["v_to"] * KMH, landing_speed_kmh=d["v_land"] * KMH,
             takeoff_peak_g=c.takeoff_peak_g, landing_peak_g=c.landing_peak_g, flight_level_g=c.flight_level_g,
-            rough_in_g=c.rough_in, rough_ref_g=c.rough_ref,
+            tilt_deg=c.tilt_deg, dip_g=c.dip_g, speed_drop_kmh=c.speed_drop * KMH,
         ))
     return pd.DataFrame(rows)
 

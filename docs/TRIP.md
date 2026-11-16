@@ -56,8 +56,7 @@ save, raw barometer (σ 1.5 Pa), GPS fix and speed, the FIT decodes in the brows
 pipeline no longer calls a wrist movement at rest a jump.
 
 Not yet verified (needs the first real session; nothing can be lost as long as the file is
-saved): the vibration level while riding (sets the "Min riding vibration" and roughness
-thresholds), real take-off/landing amplitudes at the wrist, barometer behaviour in spray and
-wind, GPS quality on the water, battery per hour (expect ≥ 10 h), what the FIT writer does
+saved): the vibration level while riding, real take-off/landing amplitudes at the wrist,
+barometer behaviour in spray and wind (all since measured - see ANALYSIS.md section 4), GPS quality on the water, battery per hour (expect ≥ 10 h), what the FIT writer does
 over 2–3 hours (watch for `gaps` in the health pills). The live jump counter on the watch is
 intentionally off.

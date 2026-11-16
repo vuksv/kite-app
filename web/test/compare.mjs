@@ -23,7 +23,8 @@ if (csvPath) {
   const py = lines.slice(1).map(splitCsv).map(r => ({ jump: +r[col('jump')], accepted: r[col('accepted')] === 'True', t_to: +r[col('t_to')], airtime: +r[col('airtime_s')], height: +r[col('height_m')], distance: +r[col('distance_m')], method: r[col('height_method')] }));
   let worstAir = 0, worstH = 0, worstD = 0, matched = 0;
   for (const p of py) {
-    const j = res.jumps.find(x => Math.abs(x.tTo - p.t_to) < 0.5);
+    let j = null;                                    // the same candidate = the same take-off sample (pops can sit 0.3 s apart)
+    for (const x of res.jumps) if (Math.abs(x.tTo - p.t_to) < 0.02 && (!j || Math.abs(x.tTo - p.t_to) < Math.abs(j.tTo - p.t_to))) j = x;
     if (!j) { console.log(`  python jump ${p.jump} (t_to=${p.t_to.toFixed(1)}) not found in JS`); continue; }
     matched++;
     worstAir = Math.max(worstAir, Math.abs(j.airtime - p.airtime));
@@ -32,6 +33,8 @@ if (csvPath) {
     if (j.accepted !== p.accepted || j.heightMethod !== p.method) console.log(`  mismatch jump ${p.jump}: accepted ${j.accepted}/${p.accepted} method ${j.heightMethod}/${p.method}`);
   }
   console.log(`python comparison: ${matched}/${py.length} matched; worst |d airtime| ${worstAir.toFixed(3)} s, |d height| ${worstH.toFixed(3)} m, |d distance| ${worstD.toFixed(2)} m`);
-  if (matched !== py.length || worstAir > 0.05 || worstH > 0.15) { console.log('FAIL'); process.exit(1); }
+  let bad = 0;
+  for (const p of py) { const j = res.jumps.find(x => Math.abs(x.tTo - p.t_to) < 0.02); if (j && j.accepted !== p.accepted) bad++; }
+  if (matched !== py.length || res.jumps.length !== py.length || bad || worstAir > 0.05 || worstH > 0.15) { console.log('FAIL'); process.exit(1); }
   console.log('PASS');
 }

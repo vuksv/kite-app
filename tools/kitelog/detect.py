@@ -1,23 +1,28 @@
 """Jump detection from the recorded streams.
 
-Signal chain (all on the accelerometer *magnitude*, so the unknown wrist
-orientation does not matter - we have no gyroscope on the Instinct 2X):
+A kite jump leaves four marks on the wrist, and the detector asks for all of them:
 
-  |f|  --LP 4 Hz-->  m4   : transients (take-off load peak, landing impact)
-  |f|  --LP 1 Hz-->  m1   : flight level (~0.5-0.9 g when the kite carries you)
-  |f| - LP3Hz(|f|)  -> hp : chop vibration residual
-  rough = RMS(hp, 0.32 s window)
-  rough_ref = rolling 60 s median of rough           (adapts to water state / speed)
+  1. a take-off POP    - a peak of the accelerometer magnitude |f| (low-passed at 4 Hz) >= 2.0 g
+  2. a landing IMPACT  - the FIRST peak >= 2.4 g that follows the pop by 1.5 .. 7.5 s
+  3. arms overhead     - between riding (3 .. 0.5 s before the pop) and the air the average
+                         direction of the acceleration in the watch frame turns by >= 40 deg:
+                         riding, the arms reach forward to the bar; in the air the rider hangs under it
+  4. a float           - somewhere in the air the 1 Hz level of |f| drops to <= 0.9 g
 
-A jump candidate is a stretch where rough < max(k * rough_ref, floor) for >= 0.5 s,
-with m1 inside the kite-supported band, bracketed by a load peak before and an
-impact peak after, while the GPS speed says we were planing.
-Take-off time  = where m4 falls through the midpoint after the load peak.
-Landing time   = onset of the impact rise after the smooth stretch.
+plus three GPS checks: the rider was moving at the pop (>= 15 km/h), did not come out of the
+"jump" faster than they went in, and a long flight (> 4 s) started at >= 25 km/h.  Of two candidates that overlap, the one with the harder
+pop + impact wins (this picks the real pop over a bump just before it).
+
+Take-off = the pop peak, landing = the impact peak, airtime = the time between them.
+
+Everything works on magnitudes and on an angle *change*, so how the watch sits on the wrist
+does not matter.  Chosen on 4 days recorded in parallel with the Surfr phone app (154 jumps):
+see docs/ANALYSIS.md.  The earlier detector ("vibration stops" + a pop/impact pair with seven
+roughness / level / speed gates, ~45 thresholds) scored lower and is gone.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -30,63 +35,21 @@ FS = P.SAMPLE_RATE
 
 @dataclass
 class DetectParams:
-    lp_transient_hz: float = 4.0
-    lp_level_hz: float = 1.0
-    hp_split_hz: float = 3.0
-    rough_win_s: float = 0.32
-    rough_ref_win_s: float = 60.0
-    rough_ratio: float = 0.30
-    rough_floor_g: float = 0.035
-    level_min_g: float = 0.25
-    level_max_g: float = 1.45
-    min_smooth_s: float = 0.32
-    merge_gap_s: float = 0.6         # blips inside the flight (kite re-trim at the apex) are bridged if no impact in between
-    takeoff_search_s: float = 1.2
-    takeoff_min_peak_g: float = 1.35
-    landing_search_s: float = 2.5     # first real jump: impact 1.7 s after the smooth stretch ended (kite steering in the descent)
-    landing_min_peak_g: float = 1.6
-    landing_rise_g: float = 0.5
-    min_speed_mps: float = 3.0
-    min_flight_speed_mps: float = 2.5
-    min_valid_frac: float = 0.6
-    max_data_gap_s: float = 1.5
-    min_flight_speed_ratio: float = 0.3
-    max_airtime_s: float = 14.0
-    takeoff_point: str = "peak"      # "peak" = load-pulse maximum, "mid" = half-way down the pulse
-    # Optional "large quick change" gates on the sample-to-sample jump of |f| (g per 40 ms).
-    # 0 = off.  With roughness contrast weak (glassy water) set rough_ratio ~0.6 and these ~0.4-0.6.
-    takeoff_min_jerk_g: float = 0.0
-    landing_min_jerk_g: float = 0.0
-    min_rough_ref_g: float = 0.05    # no chop vibration around the candidate = not riding (rest, walking): no "vibration drop" evidence
-    bridge_rough_ratio: float = 1.0
-    # "kite support": in a real jump either the kite carries you (|f| level well below 1 g) or the
-    # pop was violent; transitions/water starts show ~1.0-1.3 g with a weak 1.4-1.6 g bump
-    max_level_without_pop_g: float = 0.95
-    pop_peak_g: float = 2.0
-    # Second candidate generator, "impulse pair": a pop and an impact bracketing a quiet-ish
-    # middle.  Measured on the first real session: pops 2.6-3.8 g, impacts 3.2-5.9 g,
-    # 2.7-4.1 s apart, middle level 0.83-0.96 g with nothing above 2 g, roughness 0.5-1.2 x riding.
-    # Re-tuned on session 5 against 27 Surfr-phone jumps (and still covering session 1):
-    # pops 2.25-3.8 g, impacts 2.7-4.9 g, 2.6-5.1 s apart, flight level 0.86-1.19 g,
-    # largest bump in the air <= 2.32 g, roughness in the air <= 1.4 x riding.
-    pair_pop_g: float = 2.4
-    pair_impact_g: float = 2.3
-    pair_min_s: float = 1.5
-    pair_max_s: float = 7.0
-    pair_mid_max_peak_g: float = 2.6     # Nov 2026 re-tune on 70 Surfr-timed jumps (sessions 5, 8, 9), leave-one-session-out:
-    pair_mid_max_level_g: float = 1.15    # the wrist is often as rough in the air as on the water (session 9),
-    pair_mid_max_rough_ratio: float = 2.2 # so roughness only rejects clearly-riding stretches
-    pair_min_speed_mps: float = 5.6     # 20 km/h at the pop
-    max_air_speed_gain_mps: float = 2.0  # GPS speed in the air may not rise > 2 m/s (7.2 km/h) above take-off:
-                                         # the 20 Surfr-confirmed jumps gained <= 0.76 m/s, riding off after a slow
-                                         # turn (false 11.4 m "jump", 2026-11-05) gained 2.6 m/s; 1.0 cost simulated recall
-    use_smooth_generator: bool = False  # the original "vibration stops" detector: on 4 Surfr days 1 confirmed jump vs 10 false ones
-    pair_prepop_s: float = 2.0          # a pair shorter than this whose impact starts a jump of its own is a pre-pop bump
-    pair_long_s: float = 4.8            # a pair longer than this needs a strong pop: in session 5 every real
-    pair_long_min_pop_g: float = 3.2    # long jump popped at >= 3.0 g, the two false ones (chop slams) at 2.3 g;
-                                        # 4 Surfr days: all 4 confirmed > 4.8 s popped >= 3.43 g, 7 of 8 false ones <= 2.94 g
-    baro_gate: bool = False          # let a clean barometer trace veto a jump - off: on the water the port gets wet and the
-                                     # first real session showed no baro rise even on a clean 3 s jump
+    lp_transient_hz: float = 4.0     # |f| low-pass that carries the pop and the impact
+    lp_level_hz: float = 1.0         # |f| low-pass for the level in the air
+    pop_g: float = 2.0               # take-off peak
+    impact_g: float = 2.4            # landing peak: the first one this hard after min_air_s
+    min_air_s: float = 1.5           # pop -> impact; 1.5 s is a ~1.4 m hop, 3 s a ~3 m jump
+    max_air_s: float = 7.5
+    min_tilt_deg: float = 40.0       # wrist turn between riding and the air (Surfr-confirmed jumps: 5 % below 48 deg, chop: median 17 deg)
+    max_dip_g: float = 0.90          # lowest 1 Hz level in the air (confirmed jumps: 90 % below 0.85 g, chop pairs: 90 % above 0.80 g)
+    min_speed_mps: float = 4.2       # 15 km/h at the pop: standing, walking and water starts are not jumps
+    max_speed_gain_mps: float = 0.42 # speed in the 1.5 s after landing may not all be > take-off speed + 1.5 km/h
+                                     # (confirmed jumps: never above +1.2 km/h; riding off after a turn: +2 .. +6 km/h)
+    long_air_s: float = 4.0          # a flight longer than this (a ~4.6 m jump) ...
+    long_air_min_speed_mps: float = 6.9   # ... needs 25 km/h at the pop: all 45 confirmed long jumps took off at >= 25.9 km/h,
+                                     # the four unconfirmed 5-8 m "jumps" of the calm day (session 10) at 19-24 km/h
+    min_valid_frac: float = 0.6      # accelerometer samples present between pop and impact
 
 
 @dataclass
@@ -178,37 +141,6 @@ def _lp(x, fc, order=2):
     return signal.sosfiltfilt(sos, x)
 
 
-def _block_rolling_median(x, block, win_blocks):
-    """Median per 1 s block, then a centred rolling median over `win_blocks` blocks
-    (NaN blocks ignored), repeated back to sample rate.  Cheap enough for a phone
-    browser; the JavaScript port in web/kitelog.js does exactly the same."""
-    n = len(x)
-    nb = (n + block - 1) // block
-    bm = np.full(nb, np.nan)
-    for b in range(nb):
-        seg = x[b * block:(b + 1) * block]
-        if np.isfinite(seg).any():
-            bm[b] = np.nanmedian(seg)
-    half = win_blocks // 2
-    ref = np.full(nb, np.nan)
-    for b in range(nb):
-        seg = bm[max(0, b - half):b + half + 1]
-        seg = seg[np.isfinite(seg)]
-        if len(seg) >= 5:
-            ref[b] = np.median(seg)
-    ok = np.isfinite(ref)
-    if ok.any():
-        ref = np.interp(np.arange(nb), np.flatnonzero(ok), ref[ok])
-    else:
-        ref[:] = 0.2
-    return np.repeat(ref, block)[:n]
-
-
-def _moving_rms(x, n):
-    k = np.ones(n) / n
-    return np.sqrt(np.convolve(x * x, k, mode="same"))
-
-
 @dataclass
 class Features:
     t: np.ndarray
@@ -216,15 +148,14 @@ class Features:
     mag_f: np.ndarray     # magnitude with gaps bridged
     m4: np.ndarray
     m1: np.ndarray
-    rough: np.ndarray
-    rough_ref: np.ndarray
-    speed: np.ndarray     # GPS speed interpolated onto the 25 Hz grid (NaN-free, ffilled)
-    jerk: np.ndarray      # |d|f|| between consecutive samples (g per sample), gaps bridged
+    speed: np.ndarray     # GPS speed interpolated onto the 25 Hz grid
+    csum: np.ndarray      # (n+1,3) running sum of the acceleration vector (missing samples = 0)
+    ccnt: np.ndarray      # (n+1,) running count of valid samples
 
 
-def compute_features(s: Streams, p: DetectParams) -> Features:
-    f = s.f.copy()
-    mag = np.linalg.norm(f, axis=1)
+def compute_features(s: Streams, p: DetectParams | None = None) -> Features:
+    p = p or DetectParams()
+    mag = np.linalg.norm(s.f, axis=1)
     valid = ~np.isnan(mag)
     mag_filled = mag.copy()
     if valid.sum() >= 2:
@@ -233,270 +164,106 @@ def compute_features(s: Streams, p: DetectParams) -> Features:
         mag_filled = np.where(valid, mag, 1.0)
     m4 = _lp(mag_filled, p.lp_transient_hz)
     m1 = _lp(mag_filled, p.lp_level_hz)
-    hp = mag_filled - _lp(mag_filled, p.hp_split_hz)
-    rough = _moving_rms(hp, max(3, int(p.rough_win_s * FS)))
-    rough[~s.valid] = np.nan
-    rough_ref = _block_rolling_median(rough, FS, int(p.rough_ref_win_s))
-    rough = np.where(np.isnan(rough), np.inf, rough)
     gps_ok = ~np.isnan(s.speed)
     if gps_ok.sum() >= 2:
         speed = np.interp(s.t, s.gps_t[gps_ok], s.speed[gps_ok])
     else:
         speed = np.full_like(s.t, np.nan)
-    jerk = np.abs(np.diff(mag_filled, prepend=mag_filled[0]))
-    return Features(s.t, mag, mag_filled, m4, m1, rough, rough_ref, speed, jerk)
+    csum = np.vstack([np.zeros(3), np.cumsum(np.where(valid[:, None], s.f, 0.0), axis=0)])
+    ccnt = np.r_[0, np.cumsum(valid)]
+    return Features(s.t, mag, mag_filled, m4, m1, speed, csum, ccnt)
+
+
+def mean_vector(F: Features, i0: int, i1: int):
+    """Average acceleration vector over samples [i0, i1) (valid samples only), or None."""
+    i0, i1 = max(0, i0), min(len(F.t), i1)
+    if i1 <= i0 or F.ccnt[i1] - F.ccnt[i0] < 3:
+        return None
+    return (F.csum[i1] - F.csum[i0]) / (F.ccnt[i1] - F.ccnt[i0])
+
+
+def tilt_deg(u, v) -> float:
+    """Angle between two average acceleration vectors (deg); nan if either is missing."""
+    if u is None or v is None:
+        return float("nan")
+    d = float(np.linalg.norm(u) * np.linalg.norm(v))
+    if d < 1e-9:
+        return float("nan")
+    return float(np.degrees(np.arccos(np.clip(float(u @ v) / d, -1.0, 1.0))))
 
 
 @dataclass
 class JumpCandidate:
-    t_smooth_start: float
-    t_smooth_end: float
-    t_to: float
-    t_land: float
+    t_to: float               # take-off = pop peak (tmr clock, s)
+    t_land: float             # landing = impact peak
     airtime: float
     takeoff_peak_g: float
     landing_peak_g: float
-    flight_level_g: float
-    rough_in: float
-    rough_ref: float
-    speed_to: float
+    flight_level_g: float     # median 1 Hz level in the air
+    dip_g: float              # lowest 1 Hz level in the air
+    tilt_deg: float           # wrist turn, riding -> air
+    speed_to: float           # GPS speed at the pop (m/s)
+    speed_drop: float         # speed at the pop minus the lowest speed in the 1.5 s after landing (m/s)
     accepted: bool = True
     reject_reason: str = ""
     flags: str = ""
-    takeoff_jerk_g: float = float("nan")
-    landing_jerk_g: float = float("nan")
-    source: str = "smooth"
 
 
-def _air_speed_gain(F, t_to, t_land):
-    """Largest GPS speed in the air minus the speed at take-off (m/s); nan without GPS."""
-    if not np.isfinite(F.speed).any():
-        return np.nan
-    sel = (F.t >= t_to) & (F.t <= t_land)
-    if not sel.any():
-        return np.nan
-    return float(np.nanmax(F.speed[sel]) - np.interp(t_to, F.t, F.speed))
-
-
-def _last_peak(x, a0, a1, thr):
-    """Index of the last local maximum of x[a0:a1] that exceeds thr, else None."""
-    seg = x[a0:a1]
-    if len(seg) < 3:
-        return None
-    pk, _ = signal.find_peaks(seg, height=thr, distance=3)
-    if len(pk) == 0:
-        return None
-    return a0 + int(pk[-1])
-
-
-def _segments(mask: np.ndarray):
-    d = np.diff(np.r_[0, mask.astype(int), 0])
-    starts = np.flatnonzero(d == 1)
-    ends = np.flatnonzero(d == -1)
-    return list(zip(starts, ends))
+PRE_WIN_S = (3.0, 0.5)        # "riding" reference window: 3.0 .. 0.5 s before the pop
+AIR_MARGIN_S = (0.3, 0.25)    # the air = pop + 0.3 s .. impact - 0.25 s (keeps the two transients out)
+POST_WIN_S = 1.5              # speed after landing is looked at for this long
+OVERLAP_GUARD_S = 0.5
 
 
 def detect_jumps(s: Streams, p: DetectParams | None = None, feats: Features | None = None):
+    """-> (candidates sorted by take-off time, features).  Every pop that has an impact after it
+    becomes a candidate; `accepted` / `reject_reason` say which ones are jumps."""
     p = p or DetectParams()
     F = feats or compute_features(s, p)
     n = len(F.t)
-    thr = np.maximum(p.rough_ratio * F.rough_ref, p.rough_floor_g)
-    smooth = (F.rough < thr) & (F.m1 > p.level_min_g) & (F.m1 < p.level_max_g) & s.valid
-    segs = _segments(smooth)
-    # merge close segments
-    merged = []
-    for a, b in segs:
-        if merged:
-            pb = merged[-1][1]
-            gap = a - pb
-            quiet_blip = gap <= p.merge_gap_s * FS and F.m4[pb:a].max() < p.landing_min_peak_g
-            data_gap = gap <= p.max_data_gap_s * FS and (~s.valid[pb:a]).mean() > 0.8      # dropped record inside the flight
-            if quiet_blip or data_gap:
-                merged[-1] = (merged[-1][0], b)
-                continue
-        merged.append((a, b))
+    pk, _ = signal.find_peaks(F.m4, height=min(p.pop_g, p.impact_g), distance=6)
+    impacts = pk[F.m4[pk] >= p.impact_g]
+    have_gps = bool(np.isfinite(F.speed).any())
+    n_pre0, n_pre1 = int(PRE_WIN_S[0] * FS), int(PRE_WIN_S[1] * FS)
+    m0, m1_ = int(AIR_MARGIN_S[0] * FS), int(AIR_MARGIN_S[1] * FS)
+    n_post = int(POST_WIN_S * FS)
     cands: list[JumpCandidate] = []
-    for a, b in merged:
-        if (b - a) < p.min_smooth_s * FS:
+    for a in pk[F.m4[pk] >= p.pop_g]:
+        a = int(a)
+        k = int(np.searchsorted(impacts, a + int(np.ceil(p.min_air_s * FS - 1e-9))))
+        if k >= len(impacts):
             continue
-        if a < int(2 * FS) or b > n - int(2 * FS):
-            continue                                   # touches the stream edge: cannot see both transients
-        # take-off: load peak before the smooth stretch
-        a0 = max(0, a - int(p.takeoff_search_s * FS))
-        a1 = min(n, a + int(0.15 * FS))
-        flight_level = float(np.nanmedian(F.m1[a:b]))
-        i_pk = _last_peak(F.m4, a0, a1, p.takeoff_min_peak_g)
-        if i_pk is None:
-            i_pk = a0 + int(np.argmax(F.m4[a0:a1]))
-        pk_to = float(F.m4[i_pk])
-        takeoff_in_gap = False
-        if pk_to < p.takeoff_min_peak_g and (~s.valid[a0:a1]).any():
-            takeoff_in_gap = True
-            i_pk = a0 + int(np.flatnonzero(~s.valid[a0:a1])[-1])       # last missing sample before the flight
-            pk_to = np.nan
-        if p.takeoff_point == "mid" and not takeoff_in_gap:
-            mid = 0.5 * (pk_to + flight_level)
-            j = i_pk
-            while j < b and F.m4[j] > mid:
-                j += 1
-            t_to = F.t[j]
-        else:
-            t_to = F.t[i_pk]
-        # landing: impact onset after the smooth stretch
-        b1 = min(n, b + int(p.landing_search_s * FS))
-        # landing = the FIRST impact above threshold after the smooth stretch (not the biggest
-        # one in the window); the stretch in between must not look like riding again
-        hits = np.flatnonzero(F.m4[b:b1] >= p.landing_min_peak_g)
-        if len(hits):
-            i0 = b + int(hits[0])
-            i_lp = i0 + int(np.argmax(F.m4[i0:min(b1, i0 + int(0.4 * FS))]))
-            if i0 - b > int(0.5 * FS):
-                bridge = np.where(np.isinf(F.rough[b:i0]), np.nan, F.rough[b:i0])
-                if np.nanmedian(bridge) > p.bridge_rough_ratio * float(np.nanmedian(F.rough_ref[b:i0])):
-                    i_lp = b + int(np.argmax(F.m4[b:b + int(0.5 * FS)]))      # riding resumed before the impact: not ours
-        else:
-            i_lp = b + int(np.argmax(F.m4[b:b1])) if b1 > b else b
-        pk_land = float(F.m4[i_lp])
-        landing_in_gap = False
-        if pk_land < p.landing_min_peak_g and (~s.valid[b:b1]).any():
-            landing_in_gap = True
-            k = b + int(np.flatnonzero(~s.valid[b:b1])[0])              # first missing sample after the flight
-            pk_land = np.nan
-        else:
-            i_raw = b + int(np.nanargmax(F.mag_f[b:b1])) if b1 > b else b
-            k = i_raw
-            while k > a and F.mag_f[k] > flight_level + p.landing_rise_g:
-                k -= 1
-            k = min(k + 1, i_raw)
-        t_land = F.t[k]
-        airtime = t_land - t_to
-        spd = float(np.interp(t_to, F.t, F.speed)) if not np.isnan(F.speed[a]) else np.nan   # speed at the take-off instant
-        fl = F.speed[a:b]
-        spd_min = float(np.nanmin(fl)) if np.isfinite(fl).any() else np.nan
-        c = JumpCandidate(F.t[a], F.t[b - 1], t_to, t_land, airtime, pk_to, pk_land, flight_level,
-                          float(np.nanmean(np.where(np.isinf(F.rough[a:b]), np.nan, F.rough[a:b]))),
-                          float(np.nanmedian(F.rough_ref[a:b])), spd)
+        b = int(impacts[k])                                   # the first hard impact after the pop
+        if b - a > p.max_air_s * FS or a < n_pre0 or b + n_post > n:
+            continue
+        i0, i1 = a + m0, b - m1_
+        tilt = tilt_deg(mean_vector(F, a - n_pre0, a - n_pre1), mean_vector(F, i0, i1))
+        dip = float(F.m1[i0:i1].min())
+        v_to = float(F.speed[a]) if have_gps else float("nan")
+        v_drop = float(v_to - np.nanmin(F.speed[b:b + n_post])) if have_gps else float("nan")
         reasons = []
-        flags = []
-        c.takeoff_jerk_g = float(F.jerk[a0:a1].max())
-        c.landing_jerk_g = float(F.jerk[b:b1].max()) if b1 > b else float("nan")
-        if takeoff_in_gap:
-            flags.append("takeoff_in_gap")
-        elif pk_to < p.takeoff_min_peak_g:
-            reasons.append("no_takeoff_peak")
-        if landing_in_gap:
-            flags.append("landing_in_gap")
-        elif pk_land < p.landing_min_peak_g:
-            reasons.append("no_landing_peak")
-        if takeoff_in_gap and landing_in_gap:
-            reasons.append("both_transients_in_gap")
-        if flight_level >= p.max_level_without_pop_g and not (pk_to >= p.pop_peak_g):
-            reasons.append("no_kite_support")
-        if p.min_rough_ref_g > 0 and float(np.nanmedian(F.rough_ref[a:b])) < p.min_rough_ref_g:
-            reasons.append("no_vibration_context")
-        if p.takeoff_min_jerk_g > 0 and not takeoff_in_gap and F.jerk[a0:a1].max() < p.takeoff_min_jerk_g:
-            reasons.append("no_takeoff_jerk")
-        if p.landing_min_jerk_g > 0 and not landing_in_gap and F.jerk[b:b1].max() < p.landing_min_jerk_g:
-            reasons.append("no_landing_jerk")
-        vf = s.valid[a:b].mean()
-        if vf < p.min_valid_frac:
-            reasons.append("gap_inside")           # a bridged gap looks perfectly smooth - not evidence of flight
-        elif vf < 1.0:
-            flags.append("gap_in_flight")
-        if not p.use_smooth_generator:
-            reasons.append("smooth_detector_off")
-        c.flags = ",".join(flags)
-        if not np.isnan(spd) and spd < p.min_speed_mps:
+        if s.valid[a:b].mean() < p.min_valid_frac or np.isnan(tilt):
+            reasons.append("data_gap")
+        if have_gps and v_to < p.min_speed_mps:
             reasons.append("slow")
-        if not np.isnan(spd_min) and spd_min < max(p.min_flight_speed_mps, p.min_flight_speed_ratio * spd):
-            reasons.append("speed_collapse")      # transitions / crashes: speed dies while a jump keeps most of it (smooth candidates only)
-        if _air_speed_gain(F, t_to, t_land) > p.max_air_speed_gain_mps:
+        if not np.isnan(tilt) and tilt < p.min_tilt_deg:
+            reasons.append("no_tilt")
+        if dip > p.max_dip_g:
+            reasons.append("no_float")
+        if have_gps and v_drop < -p.max_speed_gain_mps:
             reasons.append("speed_gain")
-        if airtime <= 0.3 or airtime > p.max_airtime_s:
-            reasons.append("airtime_range")
-        c.accepted = not reasons
-        c.reject_reason = ",".join(reasons)
-        cands.append(c)
-    cands.extend(_impulse_pairs(s, F, p, cands))
+        if have_gps and (b - a) / FS > p.long_air_s and v_to < p.long_air_min_speed_mps:
+            reasons.append("slow_for_airtime")
+        cands.append(JumpCandidate(t_to=float(F.t[a]), t_land=float(F.t[b]), airtime=float(F.t[b] - F.t[a]),
+                                   takeoff_peak_g=float(F.m4[a]), landing_peak_g=float(F.m4[b]),
+                                   flight_level_g=float(np.median(F.m1[i0:i1])), dip_g=dip, tilt_deg=tilt,
+                                   speed_to=v_to, speed_drop=v_drop, accepted=not reasons, reject_reason=",".join(reasons)))
+    # overlapping jumps: the harder pop + impact wins
+    kept: list[JumpCandidate] = []
+    for c in sorted((c for c in cands if c.accepted), key=lambda c: -(c.takeoff_peak_g + c.landing_peak_g)):
+        if all(c.t_land + OVERLAP_GUARD_S < q.t_to or c.t_to > q.t_land + OVERLAP_GUARD_S for q in kept):
+            kept.append(c)
+        else:
+            c.accepted, c.reject_reason = False, "overlap"
     cands.sort(key=lambda c: c.t_to)
     return cands, F
-
-
-def _impulse_pairs(s, F, p, existing):
-    """Pop -> impact pairs with a quiet-ish middle (see DetectParams).  The impact is the FIRST
-    peak >= pair_impact_g after pair_min_s; smaller bumps in between are allowed up to
-    pair_mid_max_peak_g.  Jumped transitions nearly stop in the air, so the speed-collapse
-    gate is not applied here; the speed at the pop must show the rider was planing."""
-    n = len(F.t)
-    pk, _ = signal.find_peaks(F.m4, height=min(p.pair_pop_g, p.pair_impact_g), distance=6)
-    pops = [a for a in pk if F.m4[a] >= p.pair_pop_g]
-    impacts = [b for b in pk if F.m4[b] >= p.pair_impact_g]
-
-    def shape(a):
-        """(impact index, level, mid roughness, riding roughness) if a starts a jump-shaped pair, else None."""
-        lo, hi = a + int(p.pair_min_s * FS), min(n, a + int(p.pair_max_s * FS))
-        nxt = [b for b in impacts if lo <= b < hi]
-        if not nxt:
-            return None
-        b = int(nxt[0])
-        i0, i1 = a + int(0.3 * FS), b - int(0.25 * FS)
-        if i1 - i0 < int(0.4 * FS):
-            return None
-        mid_rough = float(np.nanmedian(np.where(np.isinf(F.rough[i0:i1]), np.nan, F.rough[i0:i1])))
-        ref = float(np.nanmedian(F.rough_ref[i0:i1]))
-        level = float(np.nanmedian(F.m1[i0:i1]))
-        if np.nanmax(F.m4[i0:i1]) >= p.pair_mid_max_peak_g or level > p.pair_mid_max_level_g or mid_rough > p.pair_mid_max_rough_ratio * ref:
-            return None
-        if s.valid[a:b].mean() < p.min_valid_frac:
-            return None
-        return b, level, mid_rough, ref
-
-    out = []
-    taken_until = -np.inf
-    for a in pops:
-        if F.t[a] < taken_until:
-            continue
-        sh = shape(a)
-        if sh is None:
-            continue
-        b, level, mid_rough, ref = sh
-        # a bump just before the real pop pairs with the pop itself as its "impact" (session 5, jump 2):
-        # if the impact starts a jump-shaped pair of its own, skip this short one
-        if (b - a) / FS < p.pair_prepop_s and F.m4[b] >= p.pair_pop_g and shape(b) is not None:
-            continue
-        i0, i1 = a + int(0.3 * FS), b - int(0.25 * FS)
-        t_to = F.t[a]
-        j0, j1 = max(a + 1, b - int(0.3 * FS)), min(n, b + int(0.3 * FS))
-        i_raw = j0 + int(np.nanargmax(F.mag_f[j0:j1]))
-        k = i_raw
-        while k > a and F.mag_f[k] > level + p.landing_rise_g:
-            k -= 1
-        k = min(k + 1, i_raw)
-        t_land = F.t[k]
-        airtime = t_land - t_to
-        if any(c.accepted and c.t_to < t_land and c.t_land > t_to for c in existing):
-            continue
-        spd = float(np.interp(t_to, F.t, F.speed)) if np.isfinite(F.speed).any() else np.nan
-        reasons = []
-        if not np.isnan(spd) and spd < max(p.min_speed_mps, p.pair_min_speed_mps):
-            reasons.append("slow")
-        if airtime <= 0.3 or airtime > p.max_airtime_s:
-            reasons.append("airtime_range")
-        if airtime > p.pair_long_s and F.m4[a] < p.pair_long_min_pop_g:
-            reasons.append("long_weak_pop")
-        if _air_speed_gain(F, t_to, t_land) > p.max_air_speed_gain_mps:
-            reasons.append("speed_gain")
-        if p.min_rough_ref_g > 0 and ref < p.min_rough_ref_g:
-            reasons.append("no_vibration_context")
-        c = JumpCandidate(F.t[i0], F.t[i1], t_to, t_land, airtime, float(F.m4[a]), float(F.m4[b]), level,
-                          mid_rough, ref, spd)
-        c.accepted = not reasons
-        c.reject_reason = ",".join(reasons)
-        c.flags = "impulse_pair"
-        c.source = "pair"
-        c.takeoff_jerk_g = float(F.jerk[max(0, a - 5):a + 5].max())
-        c.landing_jerk_g = float(F.jerk[max(0, b - 5):b + 5].max())
-        out.append(c)
-        if c.accepted:
-            taken_until = t_land + 0.5
-    return out

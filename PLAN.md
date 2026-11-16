@@ -5,6 +5,11 @@ the data format, the watch app, the offline analysis pipeline (Python and a brow
 app), a session/jump simulator, and Monte-Carlo validation results.  Everything referenced
 here is in this repository (watch app at the root, `web/`, `tools/`, `docs/`).
 
+> **Status, November 2026.** This is the original plan. Section 4.2 (detection) and 4.3 (height)
+> describe the first design, tuned on the simulator. After ten recorded sessions and four days
+> against the Surfr phone app the detector was replaced by a simpler one and the barometer dropped
+> from the height estimate: see `docs/ANALYSIS.md` section 4 for what the code does now.
+
 Goal recap (your words): start the app, record a kite session, see a timer and live speed,
 then analyse jumps afterwards on a computer – height, airtime, jump length/distance –
 plus the GPS trace on a map, Hoolan/Surfr style.  Processing happens off the watch.

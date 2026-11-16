@@ -1,11 +1,12 @@
 // report.js - KiteLog browser report: load a FIT/ZIP, analyse with kitelog.js, render.
 import { decodeFit, unwrapFit } from './fit.js';
-import { analyze, DEFAULT_DETECT, DEFAULT_HEIGHT, interp, jumpModel, localXY } from './kitelog.js';
+import { analyze, DEFAULT_DETECT, DEFAULT_HEIGHT, interp, localXY, meanVector, tiltDeg, FS } from './kitelog.js';
 
 const $ = (id) => document.getElementById(id);
 const UNITS = { kmh: [3.6, 'km/h'], kn: [1.94384, 'kn'], mps: [1, 'm/s'] };
 const KMH = 3.6;
-const PARAM_IDS = ['roughRatio', 'roughFloorG', 'takeoffMinPeakG', 'landingMinPeakG', 'levelMinG', 'levelMaxG', 'minSmoothS', 'takeoffMinJerkG', 'landingMinJerkG', 'minRoughRefG', 'maxLevelWithoutPopG', 'popPeakG', 'pairPopG', 'pairImpactG', 'pairMidMaxLevelG'];
+const PARAM_IDS = ['popG', 'impactG', 'minAirS', 'minTiltDeg', 'maxDipG'];
+const BIG_M = 3;                                   // the jumps the detector is tuned and scored on (see docs/ANALYSIS.md)
 const state = { buffer: null, name: '', fit: null, result: null, sortKey: 'jump', sortDir: 1, map: null };
 
 const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : '–';
@@ -19,7 +20,6 @@ function setStatus(msg, err = false) { const el = $('status'); el.textContent = 
 function readParams() {
   const d = { ...DEFAULT_DETECT };
   for (const id of PARAM_IDS) { const v = parseFloat($(id).value); if (Number.isFinite(v)) d[id] = v; }
-  d.baroGate = $('baroGate').checked;
   const vMin = parseFloat($('minSpeedKmh').value);        // entered in km/h, detector works in m/s
   if (Number.isFinite(vMin)) d.minSpeedMps = vMin / KMH;
   const h = { ...DEFAULT_HEIGHT, aEff: parseFloat($('aEff').value) || DEFAULT_HEIGHT.aEff };
@@ -34,15 +34,15 @@ function applyDefaults() {
 }
 function setDefaults() {                       // the Defaults button: also forget persisted tweaks
   applyDefaults();
-  try { localStorage.removeItem('kitelog.params.v2'); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem('kitelog.params.v3'); } catch (e) { /* ignore */ }
 }
 // analysis settings changed on the phone persist between visits (Defaults clears them)
 function saveParams() {
   const o = {}; for (const id of [...PARAM_IDS, 'minSpeedKmh', 'aEff', 'airtimeOffsetS', 'unit']) o[id] = $(id).value;
-  try { localStorage.setItem('kitelog.params.v2', JSON.stringify(o)); } catch (e) { /* ignore */ }
+  try { localStorage.setItem('kitelog.params.v3', JSON.stringify(o)); } catch (e) { /* ignore */ }
 }
 function loadParams() {
-  try { const o = JSON.parse(localStorage.getItem('kitelog.params.v2') || 'null'); if (o) for (const k in o) if ($(k)) $(k).value = o[k]; } catch (e) { /* ignore */ }
+  try { const o = JSON.parse(localStorage.getItem('kitelog.params.v3') || 'null'); if (o) for (const k in o) if ($(k)) $(k).value = o[k]; } catch (e) { /* ignore */ }
 }
 
 // ------------------------------------------------------------------ loading
@@ -61,7 +61,7 @@ async function loadBuffer(buffer, name) {
   }
 }
 function run() {
-  const { d, h } = readParams();
+  const { d, h } = readParams(); state.params = d;
   try {
     const t0 = performance.now();
     state.result = analyze(state.fit.records, d, h);
@@ -149,7 +149,7 @@ function render() {
     (state.fit.errors.length ? pill('decoder: ' + state.fit.errors[0], 'bad') : '');
   }
   const tiles = [
-    ['Jumps', stats.jumps, ''], ['Max height', fmt(stats.maxHeightM, 1), 'm'], ['Max airtime', fmt(stats.maxAirtimeS, 2), 's'],
+    [`Jumps ≥ ${BIG_M} m`, stats.bigJumps, ''], ['All jumps', stats.jumps, ''], ['Max height', fmt(stats.maxHeightM, 1), 'm'], ['Max airtime', fmt(stats.maxAirtimeS, 2), 's'],
     ['Longest jump', fmt(stats.longestJumpM, 0), 'm'], ['Max speed', fmt(stats.maxSpeedMps * k, 1), u], ['Max 10 s speed', fmt(stats.maxSpeed10sMps * k, 1), u],
     ['Distance', fmt(stats.distanceM / 1000, 1), 'km'], ['Tacks', stats.tacks, ''], ['Total airtime', fmt(stats.totalAirtimeS, 1), 's'],
   ];
@@ -172,13 +172,13 @@ function renderTable() {
   const { jumps } = state.result;
   const [k, u] = speedUnit();
   const show = $('showRejected').checked ? jumps : jumps.filter(j => j.accepted);
-  const cols = [['jump', '#'], ['tsTo', 'Time'], ['height', 'Height (m)'], ['airtime', 'Airtime (s)'], ['distance', 'Length (m)'], ['takeoffSpeed', `Take-off (${u})`], ['heightMethod', 'Method']];
+  const cols = [['jump', '#'], ['tsTo', 'Time'], ['height', 'Height (m)'], ['airtime', 'Airtime (s)'], ['distance', 'Length (m)'], ['takeoffSpeed', `Take-off (${u})`], ['takeoffPeakG', 'Pop / impact (g)']];
   $('jumps').querySelector('thead').innerHTML = '<tr>' + cols.map(([key, label]) => `<th data-key="${key}">${label}${state.sortKey === key ? (state.sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr>';
   const sorted = [...show].sort((a, b) => { const x = a[state.sortKey], y = b[state.sortKey]; return (typeof x === 'string' ? x.localeCompare(y) : (x - y)) * state.sortDir; });
   const ranks = topRanks();
   $('jumps').querySelector('tbody').innerHTML = sorted.map(j => `<tr class="jump ${j.accepted ? '' : 'rej'}" data-jump="${j.jump}">
       <td>${j.jump}${j.accepted ? '' : ' ✕'}${ranks.has(j.jump) ? `<span class="rank" title="top ${ranks.get(j.jump)} by height">${ranks.get(j.jump)}</span>` : ''}</td><td>${clock(j.tsTo)}</td><td><b>${fmt(j.height, 1)}</b></td><td>${fmt(j.airtime, 2)}</td><td>${fmt(j.distance, 0)}</td><td>${fmt(j.takeoffSpeed * k, 1)}</td>
-      <td>${esc(j.heightMethod)}${j.flags ? ' <span class="pill warn">' + esc(j.flags) + '</span>' : ''}${j.accepted ? '' : ' <span class="pill bad">' + esc(j.rejectReason) + '</span>'}</td></tr>`).join('');
+      <td>${fmt(j.takeoffPeakG, 1)} / ${fmt(j.landingPeakG, 1)}${j.flags ? ' <span class="pill warn">' + esc(j.flags) + '</span>' : ''}${j.accepted ? '' : ' <span class="pill bad">' + esc(j.rejectReason) + '</span>'}</td></tr>`).join('');
   $('jumps').querySelectorAll('th').forEach(th => th.onclick = () => { const key = th.dataset.key; state.sortDir = state.sortKey === key ? -state.sortDir : (key === 'jump' || key === 'tsTo' ? 1 : -1); state.sortKey = key; renderTable(); });
   $('jumps').querySelectorAll('tr.jump').forEach(tr => tr.onclick = () => toggleDetail(tr));
 }
@@ -189,7 +189,9 @@ function toggleDetail(tr) {
   const j = state.result.jumps.find(x => x.jump === +tr.dataset.jump);
   const row = document.createElement('tr');
   row.className = 'detail';
-  row.innerHTML = `<td colspan="7">${jumpDetailHtml(j)}</td>`;
+  // the table scrolls sideways on a phone: keep the charts as wide as the visible part, pinned to its left edge
+  const wrapW = tr.closest('.tablewrap') ? tr.closest('.tablewrap').clientWidth : 0;
+  row.innerHTML = `<td colspan="7"><div style="position:sticky;left:6px;${wrapW ? `width:${wrapW - 12}px` : ''}">${jumpDetailHtml(j)}</div></td>`;
   tr.after(row);
 }
 
@@ -207,17 +209,16 @@ function jumpDetailHtml(j) {
   const yMaxA = Math.min(8, Math.max(2.5, Math.max(...mag.filter(Number.isFinite)) * 1.05));
   const a = svgChart({ ...xr, h: 150, yMin: 0, yMax: yMaxA, title: `Accelerometer - load ${fmt(j.takeoffPeakG)} g · flight ${fmt(j.flightLevelG, 2)} g · impact ${fmt(j.landingPeakG)} g`, yLabel: 'g',
     series: [{ x: tx, y: mag, color: 'var(--muted)', width: 0.7, opacity: 0.8 }, { x: tx, y: m4, color: 'var(--s1)', width: 1.8 }], vlines: vl, hlines: [1] });
-  const bs = j.baroSamples || [];
-  const bx = bs.map(p => p[0] - t0), by = bs.map(p => p[1]);
-  let fitX = [], fitY = [];
-  if (Number.isFinite(j.hFit)) { const jm = jumpModel(j.airtime, j.fitAUp, j.fitADn); for (let q = 0; q <= 80; q++) { const tau = j.airtime * q / 80; fitX.push(tau + j.fitLag); fitY.push(jm.h(tau)); } }
-  const hb = Math.max(1, ...by.filter(Number.isFinite), ...fitY) * 1.15;
-  const b = svgChart({ ...xr, h: 150, yMin: Math.min(-0.5, ...by.filter(Number.isFinite)), yMax: hb, title: `Barometer - ${j.heightMethod} ${fmt(j.height)} m · airtime model ${fmt(j.hAirtime)} m`, yLabel: 'm',
-    series: [{ x: fitX, y: fitY, color: 'var(--s3)', width: 1.8 }, { x: bx, y: by, color: 'var(--s3)', dots: true }], vlines: vl, hlines: [0] });
+  // wrist turn against the riding posture (3 .. 0.5 s before the pop): arms overhead in the air
+  let iPop = 0; while (iPop < F.t.length && F.t[iPop] < j.tTo) iPop++;
+  const ref = meanVector(F, iPop - 3 * FS, iPop - Math.floor(0.5 * FS));
+  const ang = []; for (let q = i0; q < i1; q++) ang.push(tiltDeg(ref, meanVector(F, q - 6, q + 7)));
+  const b = svgChart({ ...xr, h: 150, yMin: 0, yMax: 180, title: `Wrist turn vs riding - ${fmt(j.tiltDeg, 0)}° in the air · lowest level ${fmt(j.dipG, 2)} g`, yLabel: '°',
+    series: [{ x: tx, y: ang, color: 'var(--s3)', width: 1.8 }], vlines: vl, hlines: [state.params ? state.params.minTiltDeg : DEFAULT_DETECT.minTiltDeg] });
   const c = svgChart({ ...xr, h: 130, yMin: 0, yMax: Math.max(5, Math.max(...sp.filter(Number.isFinite)) * 1.1), title: `GPS speed - take-off ${fmt(j.takeoffSpeed * k)} ${u} · landing ${fmt(j.landingSpeed * k)} ${u}`, yLabel: u, xLabel: 'seconds from take-off',
     series: [{ x: tx, y: sp, color: 'var(--s4)', width: 1.8 }], vlines: vl });
-  const extra = `<p style="font-size:13px">transients: take-off jerk ${fmt(j.takeoffJerkG, 2)} g/sample · landing jerk ${fmt(j.landingJerkG, 2)} g/sample · roughness in flight ${fmt(j.roughIn, 3)} g vs reference ${fmt(j.roughRef, 3)} g</p><p style="font-size:13px">height estimators: fit ${fmt(j.hFit)} m · parabola ${fmt(j.hQuad)} m · max sample ${fmt(j.hMaxSample)} m · airtime model ${fmt(j.hAirtime)} m · ${j.nBaro} baro samples in flight · fit RMSE ${fmt(j.fitRmse, 2)} m, a_up ${fmt(j.fitAUp)} a_dn ${fmt(j.fitADn)} m/s², lag ${fmt(j.fitLag, 2)} s · length by speed ${fmt(j.distSpeed, 0)} m / by position ${fmt(j.distPos, 0)} m${j.heightFlag ? ' · <b>' + esc(j.heightFlag) + '</b>' : ''}</p>`;
-  return legend([['var(--muted)', '|f| 25 Hz'], ['var(--s1)', '|f| low-pass 4 Hz']]) + a + legend([['var(--s3)', 'barometer height / physics fit']]) + b + c + extra;
+  const extra = `<p style="font-size:13px">Height ${fmt(j.height)} m from the airtime (pop → impact ${fmt(j.airtime, 2)} s). Lowest speed in the 1.5 s after landing: ${fmt(j.speedDrop * k, 1)} ${u} below the take-off speed.${j.accepted ? '' : ' Not counted: ' + esc(j.rejectReason) + '.'}</p>`;
+  return legend([['var(--muted)', '|f| 25 Hz'], ['var(--s1)', '|f| low-pass 4 Hz']]) + a + legend([['var(--s3)', 'wrist turn (the line is the minimum for a jump)']]) + b + c + extra;
 }
 
 function trackXY() {
@@ -315,8 +316,8 @@ function download(name, text, type = 'text/plain') {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 function exportCsv() {
-  const cols = ['jump', 'accepted', 'rejectReason', 'flags', 'tsTo', 'airtime', 'height', 'heightMethod', 'heightFlag', 'hFit', 'hQuad', 'hMaxSample', 'hAirtime', 'fitRmse', 'fitAUp', 'fitADn', 'fitLag', 'nBaro', 'distance', 'distSpeed', 'distPos', 'takeoffSpeed', 'landingSpeed', 'maxAirSpeed', 'takeoffPeakG', 'landingPeakG', 'takeoffJerkG', 'landingJerkG', 'flightLevelG', 'roughIn', 'roughRef'];
-  const speedCols = ['takeoffSpeed', 'landingSpeed', 'maxAirSpeed'];      // m/s internally, km/h in the file
+  const cols = ['jump', 'accepted', 'rejectReason', 'flags', 'tsTo', 'airtime', 'height', 'distance', 'distSpeed', 'distPos', 'takeoffSpeed', 'landingSpeed', 'maxAirSpeed', 'speedDrop', 'takeoffPeakG', 'landingPeakG', 'flightLevelG', 'dipG', 'tiltDeg'];
+  const speedCols = ['takeoffSpeed', 'landingSpeed', 'maxAirSpeed', 'speedDrop'];      // m/s internally, km/h in the file
   const rows = state.result.jumps.map(j => cols.map(c => { const v = speedCols.includes(c) ? j[c] * KMH : j[c]; return typeof v === 'number' ? (Number.isFinite(v) ? v.toFixed(4) : '') : '"' + String(v).replace(/"/g, '""') + '"'; }).join(','));
   const head = cols.map(c => speedCols.includes(c) ? c + 'Kmh' : c);
   download(state.name.replace(/\.[^.]+$/, '') + '_jumps.csv', head.join(',') + '\n' + rows.join('\n'), 'text/csv');

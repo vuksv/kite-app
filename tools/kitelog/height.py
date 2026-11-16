@@ -9,7 +9,12 @@ Estimators (all returned, `best` picks one):
   h_quad       : parabola through the three samples around the max
   h_fit        : physics fit of JumpModel(a_up, a_dn, lag) to the samples with the
                  airtime fixed by the accelerometer -> apex of the fitted curve
-  h_airtime    : a_eff * (T + 1.25 s)^2 / 8 fallback (no barometer needed)
+  h_airtime    : a_eff * (T + 1.6 s)^2 / 8 (no barometer needed)
+
+`best` is the airtime model unless HeightParams.use_baro is set: on the water the barometer
+port is wet (143 of 144 jumps on the four Surfr days) and against Surfr the barometer heights
+were off by 2.4-2.8 m where the airtime model is off by 0.7 m.  The barometer estimators are
+kept as diagnostics, and for a dry mount (helmet, harness) where they may work.
 """
 from __future__ import annotations
 
@@ -25,8 +30,9 @@ class HeightParams:
     pre_win: tuple = (-14.0, -1.5)     # seconds relative to t_to for the baseline window
     post_win: tuple = (3.0, 16.0)      # seconds relative to t_land
     temp_c: float = 15.0
-    a_eff: float = 1.43                # h = a_eff (T + airtime_offset_s)^2 / 8, fitted on 59 exact-time Surfr jumps
-    airtime_offset_s: float = 1.25     # (sessions 5, 8, 9, 10; leave-one-session-out MAE 0.83 m, 20 %)
+    a_eff: float = 1.18                # h = a_eff (T + airtime_offset_s)^2 / 8, fitted on 114 Surfr-matched jumps
+    airtime_offset_s: float = 1.6      # (sessions 5, 8, 9, 10; leave-one-day-out MAE 0.67 m = 14 % on jumps >= 3 m)
+    use_baro: bool = False             # let a clean barometer trace replace the airtime model (dry mounts only)
     lag_range: tuple = (-0.2, 1.2)     # unknown latency of the 1 Hz pressure read (s)
     a_grid: tuple = (1.0, 9.8, 36)
     min_fit_samples: int = 2
@@ -152,7 +158,9 @@ def estimate_height(t_to: float, t_land: float, press_t: np.ndarray, press: np.n
     # port blocked) and the airtime model is the safer fallback.
     fit_ok = np.isfinite(r.h_fit) and r.fit_rmse_m < max(prm.fit_rmse_abs_m, prm.fit_rmse_rel * r.h_fit)
     r.baro_ok = r.baseline_ok and fit_ok and r.h_fit <= 1.3 * r.h_ballistic + 0.5
-    if r.baro_ok:
+    if not prm.use_baro:
+        r.best, r.method = r.h_airtime, "airtime"
+    elif r.baro_ok:
         r.best, r.method = r.h_fit, "baro_fit"
     elif r.baseline_ok and np.isfinite(r.h_quad) and r.h_quad <= 1.3 * r.h_ballistic + 0.5:
         # a healthy barometer that disagrees with the model is still the better witness

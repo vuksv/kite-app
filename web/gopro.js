@@ -15,7 +15,7 @@ function setStatus(msg, err = false) { const el = $('status'); el.textContent = 
 function savedParams() {
   const d = { ...DEFAULT_DETECT }, h = { ...DEFAULT_HEIGHT };
   try {
-    const o = JSON.parse(localStorage.getItem('kitelog.params.v2') || 'null');
+    const o = JSON.parse(localStorage.getItem('kitelog.params.v3') || 'null');
     if (o) {
       for (const k in o) { const v = parseFloat(o[k]); if (k in d && Number.isFinite(v)) d[k] = v; }
       if (Number.isFinite(parseFloat(o.minSpeedKmh))) d.minSpeedMps = parseFloat(o.minSpeedKmh) / KMH;

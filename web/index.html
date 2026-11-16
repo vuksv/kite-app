@@ -24,29 +24,18 @@
       <div class="grid" style="margin-top:10px">
         <label class="field">Speed unit
           <select id="unit"><option value="kmh" selected>km/h</option><option value="kn">knots</option><option value="mps">m/s</option></select></label>
-        <label class="field">Airtime-model a<sub>eff</sub> (m/s²)<input id="aEff" type="number" step="0.05" value="1.43"></label>
-        <label class="field">Airtime correction (s)<input id="airtimeOffsetS" type="number" step="0.05" value="1.25"></label>
-        <label class="field">Flight roughness ratio<input id="roughRatio" type="number" step="0.05" value="0.30"></label>
-        <label class="field">Roughness floor (g)<input id="roughFloorG" type="number" step="0.005" value="0.035"></label>
-        <label class="field">Take-off peak min (g)<input id="takeoffMinPeakG" type="number" step="0.05" value="1.35"></label>
-        <label class="field">Landing peak min (g)<input id="landingMinPeakG" type="number" step="0.1" value="1.6"></label>
-        <label class="field">Flight level min (g)<input id="levelMinG" type="number" step="0.05" value="0.25"></label>
-        <label class="field">Flight level max (g)<input id="levelMaxG" type="number" step="0.05" value="1.45"></label>
-        <label class="field">Min take-off speed (km/h)<input id="minSpeedKmh" type="number" step="1" value="10.8"></label>
-        <label class="field">Min smooth time (s)<input id="minSmoothS" type="number" step="0.04" value="0.32"></label>
-        <label class="field">Kite support: max flight level without a pop (g)<input id="maxLevelWithoutPopG" type="number" step="0.05" value="0.95"></label>
-        <label class="field">Pop peak that proves a jump (g)<input id="popPeakG" type="number" step="0.1" value="2.0"></label>
-        <label class="field">Pair: pop min (g)<input id="pairPopG" type="number" step="0.1" value="2.4"></label>
-        <label class="field">Pair: impact min (g)<input id="pairImpactG" type="number" step="0.1" value="2.3"></label>
-        <label class="field">Pair: max level in the air (g)<input id="pairMidMaxLevelG" type="number" step="0.05" value="1.15"></label>
-        <label class="field">Min riding vibration (g, rejects rest/walking)<input id="minRoughRefG" type="number" step="0.01" value="0.05"></label>
-        <label class="field">Take-off jerk min (g/sample, 0 = off)<input id="takeoffMinJerkG" type="number" step="0.1" value="0"></label>
-        <label class="field">Landing jerk min (g/sample, 0 = off)<input id="landingMinJerkG" type="number" step="0.1" value="0"></label>
+        <label class="field">Take-off pop min (g)<input id="popG" type="number" step="0.1" value="2.0"></label>
+        <label class="field">Landing impact min (g)<input id="impactG" type="number" step="0.1" value="2.4"></label>
+        <label class="field">Min airtime (s)<input id="minAirS" type="number" step="0.1" value="1.5"></label>
+        <label class="field">Min wrist turn in the air (°)<input id="minTiltDeg" type="number" step="5" value="40"></label>
+        <label class="field">Float: lowest level in the air, max (g)<input id="maxDipG" type="number" step="0.01" value="0.90"></label>
+        <label class="field">Min take-off speed (km/h)<input id="minSpeedKmh" type="number" step="1" value="15"></label>
+        <label class="field">Height model a<sub>eff</sub> (m/s²)<input id="aEff" type="number" step="0.05" value="1.18"></label>
+        <label class="field">Height model airtime offset (s)<input id="airtimeOffsetS" type="number" step="0.05" value="1.6"></label>
       </div>
 
       <div class="row" style="margin-top:10px">
         <label><input id="showRejected" type="checkbox"> show rejected candidates</label>
-        <label><input id="baroGate" type="checkbox"> let a clean barometer veto jumps (off: port gets wet on the water)</label>
         <button id="rerun" type="button" disabled>Re-analyse</button>
         <button id="resetSettings" type="button">Defaults</button>
       </div>
@@ -79,8 +68,8 @@
     <div class="card">
       <h2 style="margin-top:0">Jumps</h2>
       <div class="tablewrap"><table id="jumps"><thead></thead><tbody></tbody></table></div>
-      <p class="noprint" style="font-size:13px">Tap a jump to see its signals. Height method: <b>baro_fit</b> = physics fit on the barometer (best),
-        <b>baro_quad</b> = parabola through barometer samples, <b>airtime</b> = a<sub>eff</sub>·T²/8 fallback when the barometer is unusable.</p>
+      <p class="noprint" style="font-size:13px">Tap a jump to see its signals. A jump is a take-off pop and a landing impact with the wrist turned (arms overhead) and a float in between;
+        height comes from the airtime. Against the Surfr phone app on four days, jumps of 3 m and more: 9 in 10 of Surfr's are found, 9 in 10 of these are in Surfr's list, height within about 0.7 m.</p>
       <div class="row noprint">
         <button id="csvBtn" type="button">Download jumps CSV</button>
         <button id="gpxBtn" type="button">Download track GPX</button>

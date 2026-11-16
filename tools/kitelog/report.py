@@ -49,14 +49,17 @@ def plot_jump(s: Streams, F: Features, c: JumpCandidate, h: HeightResult, path: 
     ax.set_ylabel("specific force (g)")
     ax.set_title("Accelerometer magnitude - load peak %.1f g, flight %.2f g, impact %.1f g" % (c.takeoff_peak_g, c.flight_level_g, c.landing_peak_g))
     ax.legend(loc="upper left", frameon=False, ncol=1)
-    # 2 roughness
+    # 2 wrist tilt against the riding posture before the pop + the 1 Hz level
     ax = axes[1]
-    rr = np.where(np.isinf(F.rough[sel]), np.nan, F.rough[sel])
-    ax.plot(tt, rr, color=C_ORANGE, lw=1.6, label="chop roughness")
-    thr = np.maximum(0.30 * F.rough_ref[sel], 0.035)
-    ax.plot(tt, thr, color=C_ORANGE, lw=1.0, ls="--", label="flight threshold")
-    ax.set_ylabel("RMS >3 Hz (g)")
-    ax.set_title("Vibration drops while airborne")
+    from .detect import mean_vector, tilt_deg, FS, PRE_WIN_S
+    i_pop = int(np.searchsorted(F.t, c.t_to))
+    ref = mean_vector(F, i_pop - int(PRE_WIN_S[0] * FS), i_pop - int(PRE_WIN_S[1] * FS))
+    idx = np.flatnonzero(sel)
+    ang = np.array([tilt_deg(ref, mean_vector(F, q - 6, q + 7)) for q in idx])
+    ax.plot(tt, ang, color=C_ORANGE, lw=1.6, label="wrist tilt vs riding (deg)")
+    ax.axhline(40.0, color=C_ORANGE, lw=1.0, ls="--")
+    ax.set_ylabel("tilt (deg)")
+    ax.set_title("Arms overhead in the air: tilt %.0f deg, lowest level %.2f g" % (c.tilt_deg, c.dip_g))
     ax.legend(loc="upper right", frameon=False, ncol=2)
     # 3 barometer
     ax = axes[2]

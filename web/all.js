@@ -18,7 +18,7 @@ function setStatus(msg, err = false) { const el = $('status'); el.textContent = 
 function savedParams() {
   const d = { ...DEFAULT_DETECT }, h = { ...DEFAULT_HEIGHT };
   try {
-    const o = JSON.parse(localStorage.getItem('kitelog.params.v2') || 'null');
+    const o = JSON.parse(localStorage.getItem('kitelog.params.v3') || 'null');
     if (o) {
       for (const k in o) { const v = parseFloat(o[k]); if (k in d && Number.isFinite(v)) d[k] = v; }
       if (Number.isFinite(parseFloat(o.minSpeedKmh))) d.minSpeedMps = parseFloat(o.minSpeedKmh) / KMH;
@@ -66,7 +66,7 @@ function render(results) {
   const max = (arr) => arr.length ? Math.max(...arr) : NaN;
   const tiles = [
     ['Sessions', ok.length, ''], ['On the water', hm(sum(x => x.stats.ridingTimeS)), ''], ['Distance', fmt(sum(x => x.stats.distanceM) / 1000, 1), 'km'],
-    ['Jumps', allJumps.length, ''], ['Max height', fmt(max(allJumps.map(j => j.height)), 1), 'm'], ['Max airtime', fmt(max(allJumps.map(j => j.airtime)), 2), 's'],
+    ['Jumps ≥ 3 m', allJumps.filter(j => j.height >= 3).length, ''], ['All jumps', allJumps.length, ''], ['Max height', fmt(max(allJumps.map(j => j.height)), 1), 'm'], ['Max airtime', fmt(max(allJumps.map(j => j.airtime)), 2), 's'],
     ['Longest jump', fmt(max(allJumps.map(j => j.distance)), 0), 'm'], ['Max speed', fmt(max(ok.map(x => x.stats.maxSpeedMps)) * KMH, 1), 'km/h'],
     ['Total airtime', fmt(allJumps.reduce((a, j) => a + j.airtime, 0) / 60, 1), 'min'],
   ];
@@ -74,14 +74,14 @@ function render(results) {
 
   // sessions table
   const maxJ = Math.max(1, ...ok.map(x => x.jumps.length));
-  $('sessions').querySelector('thead').innerHTML = '<tr><th>Session</th><th>Riding</th><th>km</th><th>Max km/h</th><th>Jumps</th><th>Max m</th><th>Max s</th></tr>';
+  $('sessions').querySelector('thead').innerHTML = '<tr><th>Session</th><th>Riding</th><th>km</th><th>Max km/h</th><th>≥ 3 m</th><th>Jumps</th><th>Max m</th><th>Max s</th></tr>';
   $('sessions').querySelector('tbody').innerHTML = results.map(x => {
     const name = `<a href="${link(x.e)}">${esc(day(x.start))} ${esc(clock(x.start))}</a><div class="sub">${esc(x.e.label)}${x.e.note ? ' · ' + esc(x.e.note) : ''}</div>`;
-    if (x.error) return `<tr><td>${name}</td><td colspan="6" style="text-align:left">could not be read: ${esc(x.error)}</td></tr>`;
+    if (x.error) return `<tr><td>${name}</td><td colspan="7" style="text-align:left">could not be read: ${esc(x.error)}</td></tr>`;
     const st = x.stats, nj = x.jumps.length;
     const jumps = x.gpsOnly ? '<span class="sub">GPS only</span>' : `${nj} <span class="bar" style="width:${Math.round(40 * nj / maxJ)}px"></span>`;
     return `<tr><td>${name}</td><td>${hm(st.ridingTimeS)}</td><td>${fmt(st.distanceM / 1000, 1)}</td><td>${fmt(st.maxSpeedMps * KMH, 1)}</td>
-      <td>${jumps}</td><td>${x.gpsOnly ? '–' : fmt(max(x.jumps.map(j => j.height)), 1)}</td><td>${x.gpsOnly ? '–' : fmt(max(x.jumps.map(j => j.airtime)), 2)}</td></tr>`;
+      <td>${x.gpsOnly ? '–' : x.jumps.filter(j => j.height >= 3).length}</td><td>${jumps}</td><td>${x.gpsOnly ? '–' : fmt(max(x.jumps.map(j => j.height)), 1)}</td><td>${x.gpsOnly ? '–' : fmt(max(x.jumps.map(j => j.airtime)), 2)}</td></tr>`;
   }).join('');
 
   renderScatter(ok.filter(x => !x.gpsOnly).slice().reverse(), allJumps);

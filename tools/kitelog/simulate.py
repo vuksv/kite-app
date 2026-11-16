@@ -127,6 +127,7 @@ class SessionSim:
         self.jumps: list[JumpTruth] = []
         self._jump_spans: list[tuple[int, int]] = []
         self.kite_h = np.zeros(self.n)       # horizontal kite pull in the air (m/s^2), along the heading
+        self.arm = np.zeros(self.n)          # extra wrist pitch in the air (rad): the rider hangs under the bar, arms overhead
         self.tack_count = 0
 
     # ------------------------------------------------------------------ timeline
@@ -250,8 +251,17 @@ class SessionSim:
         self.phase[i_ramp_end:i_land] = PH_FLIGHT
         self.vib[i_ramp_end:i_land] = air_vib
         # horizontal kite pull that brings |f| to the measured in-air level
-        level = rng.uniform(0.92, 1.12)
+        # ... with a float somewhere in the flight (measured: the 1 Hz level bottoms out at 0.64-0.87 g,
+        # anywhere between 20 % and 80 % of the airtime)
+        tau_air = np.arange(i_land - i_to) / FS_PHYS
+        T_air = max(tau_air[-1], 1e-3)
+        level = rng.uniform(0.92, 1.12) - rng.uniform(0.25, 0.45) * np.exp(-0.5 * ((tau_air - rng.uniform(0.25, 0.75) * T_air) / rng.uniform(0.35, 0.6)) ** 2)
         fz = (self.a_z[i_to:i_land] + G) / G
+        # arms go overhead 0.2-0.5 s after the pop and come back down just before the landing
+        # (measured wrist turn against the riding posture: 48-83 deg, median 64)
+        up = 1.0 / (1.0 + np.exp(-(tau_air - rng.uniform(0.2, 0.5)) / 0.08))
+        down = 1.0 / (1.0 + np.exp((tau_air - (T_air - rng.uniform(0.05, 0.25))) / 0.08))
+        self.arm[i_to:i_land] = math.radians(rng.uniform(50, 85)) * up * down
         self.kite_h[i_to:i_land] = G * np.sqrt(np.clip(level ** 2 - fz ** 2, 0, None))
         v_to = float(self.v_h[i_to])
         loss = rng.uniform(0.15, 0.40)
@@ -312,8 +322,15 @@ class SessionSim:
         roll = base_roll + math.radians(18) * np.sin(2 * math.pi * tt / rng.uniform(5, 12)) + math.radians(8) * np.sin(2 * math.pi * tt / rng.uniform(1.5, 3.5))
         pitch = base_pitch + math.radians(14) * np.sin(2 * math.pi * tt / rng.uniform(6, 15) + 1.0)
         yaw = self.psi + math.radians(rng.uniform(-60, 60))
-        R = _rot_from_angles(roll, pitch, yaw)
-        f_watch = np.einsum("nji,nj->ni", R, f_world)  # R^T f
+        f_watch = np.einsum("nji,nj->ni", _rot_from_angles(roll, pitch, yaw), f_world)  # R^T f
+        # arms overhead in the air: per jump, pitch the wrist the way that turns the measured force
+        # away from the riding posture (the kite's horizontal pull already tilts it; the two add up)
+        f_up = np.einsum("nji,nj->ni", _rot_from_angles(roll, pitch + self.arm, yaw), f_world)
+        f_dn = np.einsum("nji,nj->ni", _rot_from_angles(roll, pitch - self.arm, yaw), f_world)
+        for i0, i1 in self._jump_spans:
+            ref = f_watch[max(0, i0 - int(2.5 * FS_PHYS)):i0].mean(0)
+            cos = lambda f: float(f[i0:i1].mean(0) @ ref) / (np.linalg.norm(f[i0:i1].mean(0)) * np.linalg.norm(ref) + 1e-9)
+            f_watch[i0:i1] = f_up[i0:i1] if cos(f_up) < cos(f_dn) else f_dn[i0:i1]
         # vibration (band-limited) + wave bumps, scaled by schedule
         for ax_i in range(3):
             f_watch[:, ax_i] += self.vib * _band_noise(rng, n, FS_PHYS) * rng.uniform(0.8, 1.2)

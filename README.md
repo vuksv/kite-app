@@ -64,8 +64,10 @@ totals, a row per session, every jump on one chart, and the best jumps. Sessions
 
 Sessions recorded with the Surfr phone app in parallel keep its jump list next to the FIT
 (`sessions/*_surfr.csv`). `python tools/surfr_compare.py sessions/X.fit sessions/X_surfr.csv`
-aligns the two and reports recall, precision and height/airtime error. Current accuracy and the
-calibration history are in `docs/ANALYSIS.md`.
+aligns the two; `python tools/surfr_compare.py --all` scores every reference day. Nov 2026, four
+days, jumps of 3 m and more: 90 % of Surfr's are found, 94 % of KiteLog's are in Surfr's list,
+height 0.65 m (14 %) off; expect about 87 % / 88 % on a new day. How a jump is detected and how
+far to trust these numbers: `docs/ANALYSIS.md` section 4.
 
 ## GoPro cross-check
 
@@ -101,7 +103,8 @@ push from Claude Code / GitHub – Pages republishes in about a minute).
 
 ```
 cd tools && pip install -r requirements.txt
-python -m pytest tests                  # Monkey C <-> Python sample packing equivalence
-python validate.py                      # detection / height accuracy on simulated sessions
+python -m pytest tests                  # packing equivalence + the recorded sessions against Surfr
+python surfr_compare.py --all           # found / confirmed / height error per reference day
+python validate.py                      # smoke test on simulated sessions (not the yardstick)
 node web/test/compare.mjs web/sample/synthetic.fit web/test/expected_jumps.csv   # JS pipeline == Python pipeline
 ```
